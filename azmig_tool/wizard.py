@@ -18,8 +18,7 @@ from .models import (
     ValidationResult
 )
 from .config.parsers import ConfigParser
-from .mock import MockServersValidator
-from .live import LiveServersValidator
+from .validators import ServersValidator
 from .clients.azure_migrate_client import AzureMigrateIntegration, RecoveryServicesIntegration
 
 console = Console()
@@ -28,32 +27,22 @@ console = Console()
 class MigrationWizard:
     """Interactive wizard for bulk migration workflow"""
 
-    def __init__(self, live_mode: bool = False, credential: Optional[TokenCredential] = None):
-        self.live_mode = live_mode
+    def __init__(self, credential: Optional[TokenCredential] = None):
+        # Always use live mode with Azure integration
+        self.credential = credential if credential else DefaultAzureCredential()
 
-        # Use provided credential or create DefaultAzureCredential
-        if live_mode:
-            self.credential = credential if credential else DefaultAzureCredential()
-        else:
-            self.credential = None
+        # Use validator with Azure API integration
+        self.validator = ServersValidator(self.credential)
 
-        # Use appropriate validator based on mode
-        if live_mode:
-            self.validator = LiveServersValidator(self.credential)
-        else:
-            self.validator = MockServersValidator(success_rate=0.95)
-
-        self.migrate_integration = AzureMigrateIntegration(
-            self.credential) if live_mode else None
+        self.migrate_integration = AzureMigrateIntegration(self.credential)
         self.recovery_integration = RecoveryServicesIntegration(
-            self.credential) if live_mode else None
+            self.credential)
 
     def show_welcome(self):
         """Display welcome banner"""
-        mode = "[green]LIVE[/green]" if self.live_mode else "[yellow]MOCK[/yellow]"
         console.print(Panel.fit(
             f"[bold cyan]Azure Bulk Migration Tool[/bold cyan]\n"
-            f"Mode: {mode}\n"
+            f"Mode: [green]AZURE INTEGRATION[/green]\n"
             f"Version: 1.0.0",
             border_style="cyan",
             box=box.DOUBLE
@@ -91,16 +80,6 @@ class MigrationWizard:
         """Step 2: Select Azure Migrate project"""
         console.print("[bold cyan]Step 2: Azure Migrate Project[/bold cyan]")
 
-        if not self.live_mode:
-            console.print(
-                "[yellow]⚠ Mock mode: Using dummy project[/yellow]\n")
-            return AzureMigrateProject(
-                name="mock-migrate-project",
-                resource_group="mock-rg",
-                subscription_id="00000000-0000-0000-0000-000000000000",
-                location="eastus"
-            )
-
         # Get subscription ID if not provided
         if not subscription_id:
             subscription_id = Prompt.ask("Enter Azure Subscription ID")
@@ -113,13 +92,8 @@ class MigrationWizard:
 
         console.print("[cyan]Fetching Azure Migrate projects...[/cyan]")
 
-        if self.migrate_integration:
-            projects = self.migrate_integration.list_migrate_projects(
-                subscription_id, rg_name)
-        else:
-            console.print(
-                "[red]✗ Azure Migrate integration not available in mock mode[/red]\n")
-            return None
+        projects = self.migrate_integration.list_migrate_projects(
+            subscription_id, rg_name)
 
         if not projects:
             console.print("[red]✗ No Azure Migrate projects found[/red]\n")
@@ -159,15 +133,6 @@ class MigrationWizard:
         """Step 3: Select replication cache/staging"""
         console.print(
             "[bold cyan]Step 3: Replication Cache Configuration[/bold cyan]")
-
-        if not self.live_mode:
-            console.print("[yellow]⚠ Mock mode: Using dummy cache[/yellow]\n")
-            return ReplicationCache(
-                name="mock-cache",
-                resource_group="mock-rg",
-                storage_account="mockstorage",
-                subscription_id="00000000-0000-0000-0000-000000000000"
-            )
 
         # For now, manual input (could be enhanced to list existing caches)
         cache_rg = Prompt.ask("Enter cache resource group name")
@@ -230,14 +195,12 @@ class MigrationWizard:
             if not user_oid:
                 user_oid = None
 
-        # Run validations using the validator (mock or live)
+        # Run validations using live Azure validator
         console.print("\n[cyan]Running validations...[/cyan]")
         validation_results = self.validator.validate_all(
             configs,
             project=project,
-            user_object_id=user_oid,
-            skip_rbac=(user_oid is None),
-            skip_discovery=False
+            user_object_id=user_oid
         )
 
         # Create validation reports
@@ -315,17 +278,7 @@ class MigrationWizard:
             console.print("[yellow]Replication cancelled by user[/yellow]\n")
             return []
 
-        if not self.live_mode:
-            console.print(
-                "[yellow]⚠ Mock mode: Simulating replication enablement[/yellow]")
-            results = []
-            for report in valid_reports:
-                results.append({
-                    "machine_name": report.config.target_machine_name,
-                    "status": "simulated_success",
-                    "message": "Mock mode: Replication would be enabled"
-                })
-            return results
+        # Enable replication using live Azure integration
 
         # Enable replication for each machine
         results = []

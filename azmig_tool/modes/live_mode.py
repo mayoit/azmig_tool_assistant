@@ -11,7 +11,7 @@ from ..wizard import MigrationWizard
 from ..config.validation_config import get_validation_config, reset_validation_config
 from ..auth import get_azure_credential
 from ..config.parsers import ConfigParser
-from ..live.landing_zone_validator import LiveLandingZoneValidator
+from ..validators.landing_zone_validator import LandingZoneValidator
 from ..models import MigrateProjectConfig, ValidationStatus
 import json
 from datetime import datetime
@@ -96,7 +96,7 @@ def run_live_mode(
                 "[yellow]Continuing with default validation settings[/yellow]\n")
 
     # Run wizard based on operation type
-    wizard = MigrationWizard(live_mode=True, credential=credential)
+    wizard = MigrationWizard(credential=credential)
 
     # Handle different operation types
     if operation == 'lz_validation':
@@ -147,7 +147,7 @@ def run_landing_zone_validation(lz_file: str, credential, validation_config_path
         f"\n[cyan]Found {len(landing_zones)} Landing Zone(s) to validate[/cyan]\n")
 
     # Create validator
-    validator = LiveLandingZoneValidator(
+    validator = LandingZoneValidator(
         credential=credential, validation_config=validation_config)
 
     # Validate each Landing Zone

@@ -21,11 +21,11 @@ Write-Host "  y - Use template file" -ForegroundColor Gray
 Write-Host "  n - No JSON export" -ForegroundColor Gray
 Write-Host "  y - Proceed with operation" -ForegroundColor Gray
 
-Write-Host "`nRunning azmig --mock...`n" -ForegroundColor Yellow
+Write-Host "`nRunning azmig...`n" -ForegroundColor Yellow
 Write-Host "========================================`n" -ForegroundColor Cyan
 
 # Run the tool with input
-$testInput | azmig --mock
+$testInput | azmig
 
 Write-Host "`n========================================" -ForegroundColor Cyan
 Write-Host "Test completed!" -ForegroundColor Cyan

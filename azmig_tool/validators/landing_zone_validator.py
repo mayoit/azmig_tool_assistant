@@ -1,7 +1,7 @@
 """
-Live Landing Zone Validator - Real Azure API validation for project readiness
+Landing Zone Validator - Azure API validation for project readiness
 
-This validator performs real Azure API calls to validate Azure Migrate project setup.
+This validator performs Azure API calls to validate Azure Migrate project setup.
 """
 from typing import Optional, Dict, Any, List
 from azure.identity import DefaultAzureCredential
@@ -31,7 +31,7 @@ from ..clients.azure_client import AzureMigrateApiClient
 from ..constants import AZURE_ROLE_IDS
 
 
-class LiveLandingZoneValidator(BaseLandingZoneInterface):
+class LandingZoneValidator(BaseLandingZoneInterface):
     """
     Live validator for Azure Migrate project readiness using real Azure APIs.
 

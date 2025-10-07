@@ -1,7 +1,7 @@
 """
 Test script for         console.print("✓ LandingZoneValidator imported successfully")ive Landing Zone Validator
 
-This demonstrates the Live Landing Zone Validator functionality.
+This d    results.append((\"Import Test\", test_landing_zone_validator_import()))monstrates the Landing Zone Validator functionality.
 Note: Requires valid Azure credentials and a configured environment.
 """
 from rich.console import Console
@@ -10,10 +10,10 @@ from rich.panel import Panel
 console = Console()
 
 
-def test_live_landing_zone_validator_import():
-    """Test that LiveLandingZoneValidator can be imported"""
+def test_landing_zone_validator_import():
+    """Test that LandingZoneValidator can be imported"""
     console.print(
-        "\n[bold cyan]Testing Live Landing Zone Validator Import[/bold cyan]\n")
+        "\n[bold cyan]Testing Landing Zone Validator Import[/bold cyan]\n")
 
     try:
         from azmig_tool.validators import LandingZoneValidator
@@ -48,7 +48,7 @@ def test_live_landing_zone_validator_import():
 
 
 def test_validator_with_sample_config():
-    """Test validator with a sample configuration (live mode)"""
+    """Test validator with a sample configuration"""
     console.print(
         "\n[bold cyan]Testing Validator with Sample Configuration[/bold cyan]\n")
 
@@ -116,8 +116,8 @@ if result.quota_result:
 def main():
     """Run all tests"""
     console.print(Panel.fit(
-        "[bold cyan]Live Landing Zone Validator Test Suite[/bold cyan]\n"
-        "Tests the Live implementation for Azure Migrate project validation",
+        "[bold cyan]Landing Zone Validator Test Suite[/bold cyan]\n"
+        "Tests the implementation for Azure Migrate project validation",
         border_style="cyan"
     ))
 
@@ -147,7 +147,7 @@ def main():
     else:
         console.print("\n[bold yellow]⚠ Some tests failed[/bold yellow]")
 
-    console.print("\n[bold]Key Features of LiveLandingZoneValidator:[/bold]")
+    console.print("\n[bold]Key Features of LandingZoneValidator:[/bold]")
     console.print(
         "  1. [green]RBAC Validation[/green] - Checks Contributor/Reader roles")
     console.print(

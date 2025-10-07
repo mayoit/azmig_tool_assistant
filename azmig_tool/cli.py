@@ -2,8 +2,7 @@
 import argparse
 from rich.console import Console
 
-from .modes.mock_mode import run_mock_mode
-from .modes.live_mode import run_live_mode
+from .modes.mode import run_mode
 
 console = Console()
 
@@ -11,19 +10,7 @@ console = Console()
 def main():
     parser = argparse.ArgumentParser(
         prog="azmig",
-        description="Azure Bulk Migration CLI - Migrate servers from DC to Azure (interactive wizard by default)"
-    )
-
-    # Mode selection
-    parser.add_argument(
-        "--live",
-        action="store_true",
-        help="Run in live Azure mode with interactive prompts (requires Azure authentication)"
-    )
-    parser.add_argument(
-        "--mock",
-        action="store_true",
-        help="Run in mock mode with interactive prompts for offline testing"
+        description="Azure Bulk Migration CLI - Migrate servers from DC to Azure (interactive wizard with live Azure integration)"
     )
 
     # Authentication options (optional - will prompt if not provided in live mode)
@@ -112,23 +99,9 @@ def main():
             console.print(f"[yellow]WARNING[/yellow] {e}")
         return
 
-    # Determine mode (default to interactive if neither --live nor --mock specified)
-    if not args.live and not args.mock:
-        # Show welcome and let user choose mode
-        console.print("\n[bold cyan]🛠️  Azure Bulk Migration Tool[/bold cyan]")
-        console.print("[dim]Interactive Wizard Mode[/dim]\n")
-
-        from rich.prompt import Prompt
-        mode_choice = Prompt.ask(
-            "[cyan]Select mode[/cyan]",
-            choices=["live", "mock"],
-            default="live"
-        )
-        mode = mode_choice
-    else:
-        mode = "live" if args.live and not args.mock else "mock"
-
-    console.print(f"\n[bold]Mode:[/bold] {mode.upper()}\n")
+    # Always run in live mode with Azure integration
+    console.print("\n[bold cyan]🛠️  Azure Bulk Migration Tool[/bold cyan]")
+    console.print("[dim]Live Azure Integration Mode[/dim]\n")
 
     # Gather parameters from CLI args
     provided_params = {
@@ -147,13 +120,13 @@ def main():
     # Use interactive prompts if not in non-interactive mode
     if not args.non_interactive:
         from .interactive_prompts import get_interactive_inputs
-        params = get_interactive_inputs(mode, provided_params)
+        params = get_interactive_inputs("live", provided_params)
     else:
         # Non-interactive mode - require all necessary parameters
         params = provided_params
 
         # Validate required parameters for non-interactive mode
-        if mode == "live" and not params['auth_method']:
+        if not params['auth_method']:
             console.print(
                 "[red]✗[/red] --auth-method required in non-interactive mode")
             return
@@ -168,29 +141,19 @@ def main():
         console.print("\n[green]✓[/green] Validation configuration complete!")
         return
 
-    # Run appropriate mode
-    if mode == "mock":
-        run_mock_mode(
-            excel_path=params.get('excel'),
-            export_json=params.get('export_json'),
-            validation_config_path=params.get('validation_config'),
-            validation_profile=params.get('validation_profile'),
-            operation=params.get('operation'),
-            lz_file=params.get('lz_file')
-        )
-    else:
-        run_live_mode(
-            excel_path=params.get('excel'),
-            export_json=params.get('export_json'),
-            validation_config_path=params.get('validation_config'),
-            validation_profile=params.get('validation_profile'),
-            auth_method=params.get('auth_method'),
-            tenant_id=params.get('tenant_id'),
-            client_id=params.get('client_id'),
-            client_secret=params.get('client_secret'),
-            operation=params.get('operation'),
-            lz_file=params.get('lz_file')
-        )
+    # Always run in live mode with Azure integration
+    run_mode(
+        excel_path=params.get('excel'),
+        export_json=params.get('export_json'),
+        validation_config_path=params.get('validation_config'),
+        validation_profile=params.get('validation_profile'),
+        auth_method=params.get('auth_method'),
+        tenant_id=params.get('tenant_id'),
+        client_id=params.get('client_id'),
+        client_secret=params.get('client_secret'),
+        operation=params.get('operation'),
+        lz_file=params.get('lz_file')
+    )
 
 
 if __name__ == '__main__':

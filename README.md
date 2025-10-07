@@ -43,8 +43,7 @@ A comprehensive CLI tool for **bulk migrating servers from on-premises data cent
 - 🔐 **Flexible Authentication** - 6 authentication methods (Azure CLI, Managed Identity, Service Principal, etc.)
 - 📊 **Excel-Based Configuration** - Simple spreadsheet format
 - 🧙 **Operation Modes** - Landing Zone validation, Server validation, Replication, or Full wizard
-- 🧪 **Mock Mode** - Test offline without Azure connectivity
-- ☁️ **Live Mode** - Full Azure integration with real-time validation
+- ☁️ **Azure Integration** - Real-time validation with Azure APIs
 - 📦 **Batch Processing** - Validate multiple servers simultaneously
 - 🎨 **Rich CLI Interface** - Color-coded output with progress indicators
 
@@ -73,17 +72,14 @@ pip install -e .
 
 ### Basic Usage
 
-**🌟 NEW: Interactive Wizard (Simplest)**
+**🌟 Interactive Wizard (Simplest)**
 ```bash
 # Just run the tool - it guides you through everything!
-azmig --live
-
-# Or start in mock mode for offline testing
-azmig --mock
+azmig
 ```
 
 The wizard interactively prompts for:
-- ✓ Authentication method (Live mode)
+- ✓ Authentication method
 - ✓ Operation type (validation, replication, etc.)
 - ✓ File paths (Excel, CSV, JSON)
 - ✓ Validation configuration
@@ -91,13 +87,9 @@ The wizard interactively prompts for:
 
 **Traditional CLI (Advanced)**
 ```bash
-# Test in Mock Mode
-azmig --mock --excel tests/data/sample_migration.xlsx
-
-# Run in Live Mode with all parameters
+# Run with Azure authentication
 az login
-azmig --live \
-      --auth-method azure_cli \
+azmig --auth-method azure_cli \
       --operation server_validation \
       --excel migration.xlsx \
       --validation-profile full
@@ -156,9 +148,7 @@ azmig --live \
 
 ```bash
 # Start interactive wizard
-azmig --live          # Live mode with prompts
-azmig --mock          # Mock mode with prompts
-azmig                 # Prompts for mode selection
+azmig                 # Interactive mode with prompts
 ```
 
 ### Traditional CLI Mode
@@ -167,8 +157,6 @@ azmig                 # Prompts for mode selection
 azmig [OPTIONS]
 
 Core Options:
-  --live                    Run in live Azure mode
-  --mock                    Run in mock/simulation mode
   --non-interactive         Disable prompts (requires all parameters)
 
 Operation Options:
@@ -179,7 +167,7 @@ Operation Options:
                            - configure_validations: Interactive config editor
                            - full_wizard: Complete workflow (default)
 
-Authentication (Live Mode):
+Authentication:
   --auth-method METHOD      azure_cli | managed_identity | service_principal |
                            interactive | device_code | default
   --tenant-id ID           Azure tenant ID
@@ -243,18 +231,18 @@ The tool supports **6 authentication methods** similar to Azure CLI:
 ```bash
 # Azure CLI (recommended)
 az login
-azmig --live --auth-method azure_cli --excel servers.xlsx
+azmig --auth-method azure_cli --excel servers.xlsx
 
 # Managed Identity (on Azure VM/App Service)
-azmig --live --auth-method managed_identity --excel servers.xlsx
+azmig --auth-method managed_identity --excel servers.xlsx
 
 # Service Principal (automation)
-azmig --live --auth-method service_principal \
+azmig --auth-method service_principal \
     --tenant-id "xxx" --client-id "yyy" --client-secret "zzz" \
     --excel servers.xlsx
 
 # Let tool prompt for method
-azmig --live --excel servers.xlsx
+azmig --excel servers.xlsx
 ```
 
 **Required Permissions:**

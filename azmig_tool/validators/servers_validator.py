@@ -1,5 +1,5 @@
 """
-Live Servers Validator - Real Azure API validation
+Servers Validator - Azure API validation
 """
 from typing import Optional, Dict, Any
 from azure.identity import DefaultAzureCredential
@@ -18,7 +18,7 @@ from ..constants import AZURE_REGIONS, AZURE_ROLE_IDS
 from ..config.validation_config import ValidationConfig
 
 
-class LiveServersValidator(BaseValidatorInterface):
+class ServersValidator(BaseValidatorInterface):
     """Live validator using Azure APIs"""
 
     def __init__(self, credential: Optional[DefaultAzureCredential] = None, validation_config: Optional[ValidationConfig] = None):
