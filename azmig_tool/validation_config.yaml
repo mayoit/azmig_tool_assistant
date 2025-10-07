@@ -1,0 +1,28 @@
+active_profile: default
+global:
+  fail_fast: false
+  parallel_execution: false
+landing_zone:
+  access_validation:
+    enabled: true
+  appliance_health:
+    enabled: true
+  quota_validation:
+    enabled: true
+  storage_cache:
+    enabled: true
+servers:
+  discovery_validation:
+    enabled: true
+  disk_type_validation:
+    enabled: true
+  rbac_validation:
+    enabled: true
+  region_validation:
+    enabled: true
+  resource_group_validation:
+    enabled: true
+  vm_sku_validation:
+    enabled: true
+  vnet_subnet_validation:
+    enabled: true

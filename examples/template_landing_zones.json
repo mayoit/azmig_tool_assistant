@@ -1,0 +1,22 @@
+[
+    {
+        "subscription_id": "12345678-1234-1234-1234-123456789012",
+        "resource_group": "migrate-rg",
+        "migrate_project_name": "MigrateProject-EastUS",
+        "recovery_vault_name": "RecoveryVault-EastUS",
+        "region": "eastus",
+        "cache_storage_account": "cachestorage001",
+        "appliance_name": "MigrateAppliance-VMware-EastUS",
+        "virtualization_type": "vmware"
+    },
+    {
+        "subscription_id": "87654321-4321-4321-4321-210987654321",
+        "resource_group": "migrate-rg-eu",
+        "migrate_project_name": "MigrateProject-WestEU",
+        "recovery_vault_name": "RecoveryVault-WestEU",
+        "region": "westeurope",
+        "cache_storage_account": "cachestorage002",
+        "appliance_name": "MigrateAppliance-HyperV-WestEU",
+        "virtualization_type": "hyperv"
+    }
+]

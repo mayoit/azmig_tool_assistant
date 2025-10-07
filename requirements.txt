@@ -1,0 +1,13 @@
+rich
+pandas
+openpyxl
+pyyaml
+azure-identity
+azure-mgmt-resource
+azure-mgmt-compute
+azure-mgmt-network
+azure-mgmt-authorization
+azure-mgmt-recoveryservices
+azure-mgmt-storage
+azure-core
+requests
