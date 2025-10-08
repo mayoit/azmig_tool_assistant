@@ -14,6 +14,7 @@ from rich.console import Console
 from ..models import (
     MigrationConfig,
     MigrateProjectConfig,
+    ConsolidatedMigrationConfig,
     ValidationResult,
     ValidationStage
 )
@@ -23,6 +24,9 @@ from ..constants import (
     SERVERS_REQUIRED_COLUMNS,
     SERVERS_OPTIONAL_COLUMNS,
     SERVERS_COLUMN_MAPPING,
+    CONSOLIDATED_REQUIRED_COLUMNS,
+    CONSOLIDATED_OPTIONAL_COLUMNS,
+    CONSOLIDATED_COLUMN_MAPPING,
     # Backward compatibility
     LAYER1_CSV_COLUMNS,
     LAYER1_OPTIONAL_COLUMNS,
@@ -137,6 +141,8 @@ class ConfigParser:
                             region=row.get("Region", ""),
                             cache_storage_account=row.get(
                                 "Cache Storage Account", ""),
+                            cache_storage_resource_group=row.get(
+                                "Cache Storage Resource Group", ""),
                             migrate_project_subscription=row.get(
                                 "Migrate Project Subscription", ""),
                             migrate_resource_group=row.get(
@@ -202,6 +208,8 @@ class ConfigParser:
                         region=proj.get("region", ""),
                         cache_storage_account=proj.get(
                             "cache_storage_account", ""),
+                        cache_storage_resource_group=proj.get(
+                            "cache_storage_resource_group", ""),
                         migrate_project_subscription=proj.get(
                             "migrate_project_subscription", ""),
                         migrate_resource_group=proj.get(
@@ -293,6 +301,7 @@ class ConfigParser:
                         "Appliance Name": config.appliance_name,
                         "Region": config.region,
                         "Cache Storage Account": config.cache_storage_account,
+                        "Cache Storage Resource Group": config.cache_storage_resource_group,
                         "Migrate Project Subscription": config.migrate_project_subscription,
                         "Migrate Resource Group": config.migrate_resource_group,
                         "Recovery Vault Name": config.recovery_vault_name or ""
@@ -327,6 +336,7 @@ class ConfigParser:
                         "appliance_name": c.appliance_name,
                         "region": c.region,
                         "cache_storage_account": c.cache_storage_account,
+                        "cache_storage_resource_group": c.cache_storage_resource_group,
                         "migrate_project_subscription": c.migrate_project_subscription,
                         "migrate_resource_group": c.migrate_resource_group,
                         "recovery_vault_name": c.recovery_vault_name
@@ -512,6 +522,177 @@ class ConfigParser:
             )
             return False, [], validation_results
 
+    def validate_consolidated_structure(self) -> Tuple[ValidationResult, pd.DataFrame]:
+        """Validate Excel structure for consolidated template (LZ + Servers) and return DataFrame"""
+        try:
+            # Read Excel file
+            self.df = pd.read_excel(self.config_path)
+
+            # Check for empty file
+            if self.df.empty:
+                return ValidationResult(
+                    stage=ValidationStage.EXCEL_STRUCTURE,
+                    passed=False,
+                    message="Excel file is empty"
+                ), None
+
+            # Strip spaces from column names
+            self.df.columns = self.df.columns.str.strip()
+
+            # Check required columns
+            missing_cols = [col for col in CONSOLIDATED_REQUIRED_COLUMNS
+                            if col not in self.df.columns]
+
+            if missing_cols:
+                return ValidationResult(
+                    stage=ValidationStage.EXCEL_STRUCTURE,
+                    passed=False,
+                    message=f"Missing required columns: {', '.join(missing_cols)}",
+                    details={"missing_columns": missing_cols}
+                ), None
+
+            # Rename columns to internal format using mapping
+            self.df = self.df.rename(columns=CONSOLIDATED_COLUMN_MAPPING)
+
+            # Check for duplicate machine names
+            duplicates = self.df[self.df.duplicated(
+                subset=['target_machine_name'], keep=False)]
+            if not duplicates.empty:
+                dup_names = duplicates['target_machine_name'].tolist()
+                return ValidationResult(
+                    stage=ValidationStage.EXCEL_STRUCTURE,
+                    passed=False,
+                    message=f"Duplicate Target Machine found: {', '.join(map(str, dup_names))}",
+                    details={"duplicate_names": dup_names}
+                ), None
+
+            # Get list of internal required column names
+            required_internal = [CONSOLIDATED_COLUMN_MAPPING[col]
+                                 for col in CONSOLIDATED_REQUIRED_COLUMNS]
+
+            # Check for null values in required columns
+            null_check = self.df[required_internal].isnull().sum()
+            cols_with_nulls = null_check[null_check > 0]
+
+            if not cols_with_nulls.empty:
+                return ValidationResult(
+                    stage=ValidationStage.EXCEL_STRUCTURE,
+                    passed=False,
+                    message=f"Null values found in required columns: {dict(cols_with_nulls)}",
+                    details={"null_columns": dict(cols_with_nulls)}
+                ), None
+
+            return ValidationResult(
+                stage=ValidationStage.EXCEL_STRUCTURE,
+                passed=True,
+                message=f"Consolidated Excel structure validated successfully ({len(self.df)} records)",
+                details={"record_count": len(self.df)}
+            ), self.df
+
+        except Exception as e:
+            return ValidationResult(
+                stage=ValidationStage.EXCEL_STRUCTURE,
+                passed=False,
+                message=f"Error reading Excel file: {str(e)}"
+            ), None
+
+    def parse_consolidated_configs(self) -> List[ConsolidatedMigrationConfig]:
+        """Parse DataFrame to list of ConsolidatedMigrationConfig objects"""
+        if self.df is None:
+            raise ValueError(
+                "Excel file not loaded. Call validate_consolidated_structure() first.")
+
+        configs = []
+        errors = []
+
+        for idx, row in self.df.iterrows():
+            try:
+                config = ConsolidatedMigrationConfig(
+                    # Landing Zone fields
+                    migrate_project_subscription=str(row['migrate_project_subscription']).strip(),
+                    migrate_project_name=str(row['migrate_project_name']).strip(),
+                    appliance_type=str(row['appliance_type']).strip(),
+                    appliance_name=str(row['appliance_name']).strip(),
+                    cache_storage_account=str(row['cache_storage_account']).strip(),
+                    cache_storage_resource_group=str(row['cache_storage_resource_group']).strip(),
+                    migrate_resource_group=str(row['migrate_resource_group']).strip(),
+                    
+                    # Server fields
+                    target_machine_name=str(row['target_machine_name']).strip(),
+                    target_region=str(row['target_region']).strip(),
+                    target_subscription=str(row['target_subscription']).strip(),
+                    target_rg=str(row['target_rg']).strip(),
+                    target_vnet=str(row['target_vnet']).strip(),
+                    target_subnet=str(row['target_subnet']).strip(),
+                    target_machine_sku=str(row['target_machine_sku']).strip(),
+                    target_disk_type=str(row['target_disk_type']).strip(),
+                    
+                    # Optional fields
+                    source_machine_name=str(row.get('source_machine_name', '')).strip() or None,
+                    recovery_vault_name=str(row.get('recovery_vault_name', '')).strip() or None
+                )
+                configs.append(config)
+            except ValueError as e:
+                row_number = int(idx) + 2 if isinstance(idx, int) else idx
+                errors.append(f"Row {row_number}: {str(e)}")
+                console.print(f"[yellow]⚠ Row {row_number}: {str(e)}[/yellow]")
+
+        if errors:
+            console.print(
+                f"\n[red]Found {len(errors)} configuration errors.[/red]")
+            for error in errors[:5]:  # Show first 5 errors
+                console.print(f"  [red]• {error}[/red]")
+            if len(errors) > 5:
+                console.print(f"  [red]... and {len(errors) - 5} more[/red]")
+
+        return configs
+
+    def parse_consolidated(self) -> Tuple[bool, List[ConsolidatedMigrationConfig], List[ValidationResult]]:
+        """
+        Complete validation and parsing workflow for consolidated template (LZ + Servers).
+
+        Returns:
+            Tuple of (success, configs, validation_results)
+        """
+        validation_results = []
+
+        # Step 1: Check file exists
+        file_result = self.validate_file_exists()
+        validation_results.append(file_result)
+        if not file_result.passed:
+            return False, [], validation_results
+
+        # Step 2: Validate structure
+        structure_result, df = self.validate_consolidated_structure()
+        validation_results.append(structure_result)
+        if not structure_result.passed:
+            return False, [], validation_results
+
+        # Step 3: Parse to configs
+        try:
+            configs = self.parse_consolidated_configs()
+            if not configs:
+                validation_results.append(
+                    ValidationResult(
+                        stage=ValidationStage.EXCEL_STRUCTURE,
+                        passed=False,
+                        message="No valid configurations parsed from Excel"
+                    )
+                )
+                return False, [], validation_results
+
+            return True, configs, validation_results
+
+        except Exception as e:
+            validation_results.append(
+                ValidationResult(
+                    stage=ValidationStage.EXCEL_STRUCTURE,
+                    passed=False,
+                    message=f"Error parsing configurations: {str(e)}"
+                )
+            )
+            return False, [], validation_results
+
     # Backward compatibility alias
     def parse_layer2(self) -> Tuple[bool, List[MigrationConfig], List[ValidationResult]]:
         """
@@ -526,18 +707,71 @@ class ConfigParser:
     # Auto-detect and Parse
     # ========================================
 
-    def parse(self) -> Tuple[bool, Union[List[MigrateProjectConfig], List[MigrationConfig]], Union[str, List[ValidationResult]]]:
+    def detect_excel_format(self) -> str:
+        """
+        Auto-detect Excel format (consolidated vs. servers-only)
+        
+        Returns:
+            'consolidated' if it has both LZ and server columns
+            'servers' if it has only server columns
+            'unknown' if it doesn't match either format
+        """
+        if self.file_type != 'excel':
+            return 'unknown'
+            
+        try:
+            # Read Excel file to check columns
+            df = pd.read_excel(self.config_path)
+            if df.empty:
+                return 'unknown'
+            
+            # Strip spaces from column names
+            columns = [col.strip() for col in df.columns]
+            
+            # Check for consolidated format (has both LZ and server columns)
+            lz_cols_present = sum(1 for col in CONSOLIDATED_REQUIRED_COLUMNS[:7] if col in columns)  # First 7 are LZ columns
+            server_cols_present = sum(1 for col in CONSOLIDATED_REQUIRED_COLUMNS[7:] if col in columns)  # Rest are server columns
+            
+            # If it has most LZ columns (5+ out of 7) and server columns, it's consolidated
+            if lz_cols_present >= 5 and server_cols_present >= 6:
+                return 'consolidated'
+            
+            # Check for traditional server format (has server columns but few/no LZ columns)
+            server_traditional = sum(1 for col in SERVERS_REQUIRED_COLUMNS if col in columns)
+            if server_traditional >= 6 and lz_cols_present <= 2:
+                return 'servers'
+                
+            return 'unknown'
+            
+        except Exception:
+            return 'unknown'
+
+    def parse(self) -> Tuple[bool, Union[List[MigrateProjectConfig], List[MigrationConfig], List[ConsolidatedMigrationConfig]], Union[str, List[ValidationResult]]]:
         """
         Auto-detect file type and parse accordingly
 
         Returns:
             For Landing Zone (CSV/JSON): Tuple of (success, List[MigrateProjectConfig], message)
-            For Servers (Excel): Tuple of (success, List[MigrationConfig], validation_results)
+            For Servers (Excel): Tuple of (success, List[MigrationConfig], validation_results) 
+            For Consolidated (Excel): Tuple of (success, List[ConsolidatedMigrationConfig], validation_results)
         """
         if self.file_type in ['csv', 'json']:
             return self.parse_landing_zone()
         elif self.file_type == 'excel':
-            return self.parse_servers()
+            excel_format = self.detect_excel_format()
+            
+            if excel_format == 'consolidated':
+                console.print("[cyan]Detected consolidated Excel template (Landing Zone + Servers)[/cyan]")
+                return self.parse_consolidated()
+            elif excel_format == 'servers':
+                console.print("[cyan]Detected traditional server Excel template[/cyan]")
+                return self.parse_servers()
+            else:
+                return False, [], [ValidationResult(
+                    stage=ValidationStage.EXCEL_STRUCTURE,
+                    passed=False,
+                    message="Excel file format not recognized. Please use consolidated template with both Landing Zone and Server columns, or traditional server template."
+                )]
         else:
             return False, [], f"Unsupported file format: {self.config_path.suffix}"
 

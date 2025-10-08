@@ -28,21 +28,22 @@ class MigrationWizard:
     """Interactive wizard for bulk migration workflow"""
 
     def __init__(self, credential: Optional[TokenCredential] = None):
-        # Always use live mode with Azure integration
+        # Always use Azure integration
         self.credential = credential if credential else DefaultAzureCredential()
 
         # Use validator with Azure API integration
-        self.validator = ServersValidator(self.credential)
+        self.validator = ServersValidator(self.credential)  # type: ignore
 
-        self.migrate_integration = AzureMigrateIntegration(self.credential)
+        self.migrate_integration = AzureMigrateIntegration(
+            self.credential)  # pyright: ignore[reportArgumentType]
         self.recovery_integration = RecoveryServicesIntegration(
-            self.credential)
+            self.credential)  # type: ignore
 
     def show_welcome(self):
         """Display welcome banner"""
         console.print(Panel.fit(
             f"[bold cyan]Azure Bulk Migration Tool[/bold cyan]\n"
-            f"Mode: [green]AZURE INTEGRATION[/green]\n"
+            f"[green]Azure Integration Ready[/green]\n"
             f"Version: 1.0.0",
             border_style="cyan",
             box=box.DOUBLE
@@ -195,7 +196,7 @@ class MigrationWizard:
             if not user_oid:
                 user_oid = None
 
-        # Run validations using live Azure validator
+        # Run validations using Azure validator
         console.print("\n[cyan]Running validations...[/cyan]")
         validation_results = self.validator.validate_all(
             configs,
@@ -278,7 +279,7 @@ class MigrationWizard:
             console.print("[yellow]Replication cancelled by user[/yellow]\n")
             return []
 
-        # Enable replication using live Azure integration
+        # Enable replication using Azure integration
 
         # Enable replication for each machine
         results = []

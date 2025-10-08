@@ -33,7 +33,7 @@ from ..constants import AZURE_ROLE_IDS
 
 class LandingZoneValidator(BaseLandingZoneInterface):
     """
-    Live validator for Azure Migrate project readiness using real Azure APIs.
+    Validator for Azure Migrate project readiness using Azure APIs.
 
     Features:
     - Real-time RBAC permission validation
@@ -43,7 +43,7 @@ class LandingZoneValidator(BaseLandingZoneInterface):
 
     Usage:
         credential = DefaultAzureCredential()
-        validator = LiveLandingZoneValidator(credential)
+        validator = LandingZoneValidator(credential)
         result = validator.validate_project(config)
     """
 
@@ -53,7 +53,7 @@ class LandingZoneValidator(BaseLandingZoneInterface):
         validation_config: Optional[ValidationConfig] = None
     ):
         """
-        Initialize live validator
+        Initialize validator
 
         Args:
             credential: Azure credential (uses DefaultAzureCredential if not provided)
@@ -157,7 +157,7 @@ class LandingZoneValidator(BaseLandingZoneInterface):
     def _get_migrate_project_scope(self, config: MigrateProjectConfig) -> str:
         """Build resource scope for Azure Migrate project"""
         return (
-            f"/subscriptions/{config.subscription_id}"
+            f"/subscriptions/{config.migrate_project_subscription}"
             f"/resourceGroups/{config.migrate_resource_group}"
             f"/providers/Microsoft.Migrate/migrateProjects/{config.migrate_project_name}"
         )
@@ -167,7 +167,7 @@ class LandingZoneValidator(BaseLandingZoneInterface):
         if not config.recovery_vault_name:
             return None
         return (
-            f"/subscriptions/{config.subscription_id}"
+            f"/subscriptions/{config.migrate_project_subscription}"
             f"/resourceGroups/{config.migrate_resource_group}"
             f"/providers/Microsoft.RecoveryServices/vaults/{config.recovery_vault_name}"
         )
@@ -222,7 +222,7 @@ class LandingZoneValidator(BaseLandingZoneInterface):
                         details={
                             "error": "SubscriptionNotFound",
                             "message": "The subscription does not exist or you don't have access to it",
-                            "mode": "live",
+
                             "critical": True
                         }
                     )
@@ -234,7 +234,7 @@ class LandingZoneValidator(BaseLandingZoneInterface):
             # Check Migrate project access
             migrate_scope = self._get_migrate_project_scope(config)
             has_migrate = self._check_role_assignment(
-                config.subscription_id,
+                config.migrate_project_subscription,
                 migrate_scope,
                 AZURE_ROLE_IDS["Contributor"]
             )
@@ -244,7 +244,7 @@ class LandingZoneValidator(BaseLandingZoneInterface):
             vault_scope = self._get_vault_scope(config)
             if vault_scope:
                 has_vault = self._check_role_assignment(
-                    config.subscription_id,
+                    config.migrate_project_subscription,
                     vault_scope,
                     AZURE_ROLE_IDS["Contributor"]
                 )
@@ -284,8 +284,7 @@ class LandingZoneValidator(BaseLandingZoneInterface):
                 details={
                     "migrate_project": "Contributor" if has_migrate else "No access",
                     "recovery_vault": "Contributor" if has_vault else "No access" if vault_scope else "N/A",
-                    "subscription": "Reader" if has_reader else "No access",
-                    "mode": "live"
+                    "subscription": "Reader" if has_reader else "No access"
                 }
             )
 
@@ -298,7 +297,7 @@ class LandingZoneValidator(BaseLandingZoneInterface):
                 has_contributor_recovery_vault=False,
                 has_reader_subscription=False,
                 message=f"Error validating access: {str(e)}",
-                details={"error": str(e), "mode": "live"}
+                details={"error": str(e)}
             )
 
     def validate_appliance_health(self, config: MigrateProjectConfig) -> ApplianceHealthResult:
@@ -317,10 +316,11 @@ class LandingZoneValidator(BaseLandingZoneInterface):
             ApplianceHealthResult with appliance health details
         """
         try:
-            migrate_client = self._get_migrate_client(config.subscription_id)
+            migrate_client = self._get_migrate_client(
+                config.migrate_project_subscription)
 
             # Get appliances from Azure Migrate project
-            appliances_data = migrate_client.list_appliances(
+            appliances_data = migrate_client.get_appliances(
                 config.migrate_resource_group,
                 config.migrate_project_name
             )
@@ -332,11 +332,11 @@ class LandingZoneValidator(BaseLandingZoneInterface):
                 properties = appliance_data.get('properties', {})
 
                 # Determine appliance type
-                appliance_type_str = properties.get('applianceType', 'VMware')
+                appliance_type_str = properties.get('applianceType', 'VMWARE')
                 try:
                     appliance_type = ApplianceType[appliance_type_str]
                 except (KeyError, AttributeError):
-                    appliance_type = ApplianceType.VMware
+                    appliance_type = ApplianceType.VMWARE
 
                 # Get health status
                 health_state = properties.get('healthState', 'Unknown')
@@ -458,7 +458,7 @@ class LandingZoneValidator(BaseLandingZoneInterface):
             # Check if storage account exists
             try:
                 storage_account = storage_client.storage_accounts.get_properties(
-                    config.migrate_resource_group,
+                    config.cache_storage_resource_group,
                     config.cache_storage_account
                 )
 
@@ -471,9 +471,9 @@ class LandingZoneValidator(BaseLandingZoneInterface):
                         storage_info=StorageCacheInfo(
                             account_name=config.cache_storage_account,
                             subscription_id=config.subscription_id,
-                            resource_group=config.migrate_resource_group,
+                            resource_group=config.cache_storage_resource_group,
                             region=storage_account.location,
-                            sku=storage_account.sku.name,
+                            sku=storage_account.sku.name if storage_account.sku else "Unknown",
                             exists=True,
                             created_by_tool=False
                         ),
@@ -488,9 +488,9 @@ class LandingZoneValidator(BaseLandingZoneInterface):
                     storage_info=StorageCacheInfo(
                         account_name=config.cache_storage_account,
                         subscription_id=config.subscription_id,
-                        resource_group=config.migrate_resource_group,
+                        resource_group=config.cache_storage_resource_group,
                         region=storage_account.location,
-                        sku=storage_account.sku.name,
+                        sku=storage_account.sku.name if storage_account.sku else "Unknown",
                         exists=True,
                         created_by_tool=False
                     ),
@@ -566,7 +566,7 @@ class LandingZoneValidator(BaseLandingZoneInterface):
                 family_name = usage.name.value
 
                 # Only check vCPU quotas
-                if 'cores' in family_name.lower() or 'vcpus' in family_name.lower():
+                if family_name and (('cores' in family_name.lower()) or ('vcpus' in family_name.lower())):
                     current_usage = usage.current_value
                     total_quota = usage.limit
                     available = total_quota - current_usage
@@ -666,7 +666,7 @@ class LandingZoneValidator(BaseLandingZoneInterface):
 
             # Start async creation
             poller = storage_client.storage_accounts.begin_create(
-                config.migrate_resource_group,
+                config.cache_storage_resource_group,
                 storage_name,
                 create_params
             )
@@ -677,9 +677,9 @@ class LandingZoneValidator(BaseLandingZoneInterface):
             storage_info = StorageCacheInfo(
                 account_name=storage_name,
                 subscription_id=config.subscription_id,
-                resource_group=config.migrate_resource_group,
+                resource_group=config.cache_storage_resource_group,
                 region=storage_account.location,
-                sku=storage_account.sku.name,
+                sku=storage_account.sku.name if storage_account.sku else "Unknown",
                 exists=True,
                 created_by_tool=True
             )

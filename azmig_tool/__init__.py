@@ -12,8 +12,8 @@ from . import clients
 from . import config
 from . import formatters
 
-# Execution modes
-from .modes.mode import run_mode
+# Core functionality
+from .core import run_migration_tool
 
 # Base interfaces
 from .base import BaseValidatorInterface, BaseLandingZoneInterface
@@ -47,8 +47,8 @@ Layer1ConfigParser = LandingZoneConfigParser
 # Backward compatibility - module-level imports
 
 __all__ = [
-    # Modes
-    "run_mode",
+    # Core functionality
+    "run_migration_tool",
 
     # Base interfaces
     "BaseValidatorInterface",

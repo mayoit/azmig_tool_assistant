@@ -459,6 +459,440 @@ class AzureMigrateApiClient(AzureRestApiClient):
             print(f"Error listing assessments: {e}")
             return []
 
+    def get_appliances(self, resource_group: str, project_name: str) -> List[Dict[str, Any]]:
+        """
+        Get appliances in an Azure Migrate project
+
+        Args:
+            resource_group: Resource group name
+            project_name: Project name
+
+        Returns:
+            List of appliance dictionaries
+        """
+        try:
+            # Try different API approaches in order of reliability
+            api_attempts = [
+                {
+                    'name': 'Resource Graph - Resources table',
+                    'method': self._try_resource_graph_resources,
+                    'args': (resource_group, project_name)
+                },
+                {
+                    'name': 'Direct ServerSites - 2023-06-06',
+                    'method': self._try_server_sites_api,
+                    'args': (resource_group, project_name, '2023-06-06')
+                },
+                {
+                    'name': 'Direct ServerSites - 2022-10-27',
+                    'method': self._try_server_sites_api,
+                    'args': (resource_group, project_name, '2022-10-27')
+                },
+                {
+                    'name': 'Migrate Project solutions - 2020-05-01',
+                    'method': self._try_migrate_solutions,
+                    'args': (resource_group, project_name, '2020-05-01')
+                },
+                {
+                    'name': 'Migrate Project solutions - 2019-06-01',
+                    'method': self._try_migrate_solutions,
+                    'args': (resource_group, project_name, '2019-06-01')
+                }
+            ]
+
+            for attempt in api_attempts:
+                try:
+                    print(f"Trying {attempt['name']}...")
+                    result = attempt['method'](*attempt['args'])
+                    if result:
+                        print(
+                            f"✅ Successfully retrieved {len(result)} appliance(s) via {attempt['name']}")
+                        return result
+                except Exception as e:
+                    print(f"❌ {attempt['name']} failed: {e}")
+                    continue
+
+            print(f"❌ All API attempts failed for project {project_name}")
+            return []
+
+        except Exception as e:
+            print(f"Error getting appliances: {e}")
+            return []
+
+    def _try_resource_graph_resources(self, resource_group: str, project_name: str) -> List[Dict[str, Any]]:
+        """Try Resource Graph with Resources table"""
+        query = f"""
+        Resources
+        | where type == "microsoft.offazure/serversites"
+        | where resourceGroup == "{resource_group}"
+        | where properties.discoverySolutionId contains "{project_name}"
+        | project id, name, type, properties, resourceGroup, subscriptionId
+        """
+
+        result = self._query_resource_graph(query)
+        if result:
+            return self._parse_resource_graph_appliances(result)
+        return []
+
+    def _try_server_sites_api(self, resource_group: str, project_name: str, api_version: str) -> List[Dict[str, Any]]:
+        """Try direct ServerSites API with specific version"""
+        path = f"/subscriptions/{self.subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.OffAzure/ServerSites"
+
+        result = self.list_all(path, api_version=api_version)
+        if result:
+            # Filter ServerSites related to this project
+            filtered_appliances = []
+            for site in result:
+                discovery_solution = site.get(
+                    'properties', {}).get('discoverySolutionId', '')
+                if project_name in discovery_solution:
+                    filtered_appliances.append(
+                        self._format_server_site_as_appliance(site))
+            return filtered_appliances
+        return []
+
+    def _try_migrate_solutions(self, resource_group: str, project_name: str, api_version: str) -> List[Dict[str, Any]]:
+        """Try Migrate Project solutions API"""
+        path = f"/subscriptions/{self.subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Migrate/migrateProjects/{project_name}/solutions"
+
+        result = self.list_all(path, api_version=api_version)
+        if result:
+            # Look for appliance-related solutions
+            appliance_solutions = []
+            for solution in result:
+                solution_type = solution.get('properties', {}).get('tool', '')
+                if 'appliance' in solution_type.lower() or 'discovery' in solution_type.lower() or 'server' in solution_type.lower():
+                    # Convert solution to appliance format
+                    appliance_solutions.append(
+                        self._format_solution_as_appliance(solution, project_name))
+            return appliance_solutions
+        return []
+
+    def _format_solution_as_appliance(self, solution: Dict[str, Any], project_name: str) -> Dict[str, Any]:
+        """Format a solution response as an appliance"""
+        properties = solution.get('properties', {})
+
+        return {
+            'id': solution.get('id', ''),
+            'name': solution.get('name', ''),
+            'type': 'solution-based-appliance',
+            'appliance_name': f"{project_name}-appliance",
+            'provisioning_state': properties.get('status', 'Unknown'),
+            'service_endpoint': '',
+            'last_heartbeat': '',
+            'agent_version': '',
+            'discovery_scenario': 'Migrate',
+            'health_status': 'Unknown' if properties.get('status') != 'Active' else 'Healthy',
+            'properties': properties,
+            'tool': properties.get('tool', ''),
+            'details': properties.get('details', {})
+        }
+
+    def _query_resource_graph(self, query: str) -> Optional[Dict[str, Any]]:
+        """
+        Query Azure Resource Graph
+
+        Args:
+            query: KQL query string
+
+        Returns:
+            Resource Graph query result or None
+        """
+        try:
+            # Resource Graph batch API endpoint
+            batch_path = "/providers/Microsoft.ResourceGraph/resources"
+
+            query_body = {
+                "subscriptions": [self.subscription_id],
+                "query": query,
+                "options": {
+                    "resultFormat": "table"
+                }
+            }
+
+            return self.post(batch_path, query_body, api_version="2021-03-01")
+
+        except Exception as e:
+            print(f"Resource Graph query failed: {e}")
+            return None
+
+    def _parse_resource_graph_appliances(self, graph_result: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Parse Resource Graph response into appliance format
+
+        Args:
+            graph_result: Resource Graph API response
+
+        Returns:
+            List of formatted appliance dictionaries
+        """
+        appliances = []
+
+        try:
+            data = graph_result.get('data', {})
+            columns = data.get('columns', [])
+            rows = data.get('rows', [])
+
+            # Create column name to index mapping
+            col_map = {col['name']: i for i, col in enumerate(columns)}
+
+            for row in rows:
+                appliance = {
+                    'id': row[col_map.get('id', 0)] if 'id' in col_map else '',
+                    'name': row[col_map.get('name', 2)] if 'name' in col_map else '',
+                    'type': row[col_map.get('type', 1)] if 'type' in col_map else '',
+                    'resource_group': row[col_map.get('resourceGroup', 0)] if 'resourceGroup' in col_map else '',
+                    'properties': row[col_map.get('properties', 3)] if 'properties' in col_map else {}
+                }
+
+                # Extract appliance-specific properties
+                properties = appliance['properties']
+                if isinstance(properties, dict):
+                    appliance.update({
+                        'appliance_name': properties.get('applianceName', appliance['name']),
+                        'provisioning_state': properties.get('provisioningState', 'Unknown'),
+                        'service_endpoint': properties.get('serviceEndpoint', ''),
+                        'last_heartbeat': properties.get('agentDetails', {}).get('lastHeartBeatUtc', ''),
+                        'agent_version': properties.get('agentDetails', {}).get('version', ''),
+                        'discovery_scenario': properties.get('discoveryScenario', ''),
+                        'health_status': self._determine_appliance_health(properties)
+                    })
+
+                appliances.append(appliance)
+
+        except Exception as e:
+            print(f"Error parsing Resource Graph appliances: {e}")
+
+        return appliances
+
+    def _format_server_site_as_appliance(self, server_site: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Format ServerSite as appliance dictionary
+
+        Args:
+            server_site: ServerSite resource
+
+        Returns:
+            Formatted appliance dictionary
+        """
+        properties = server_site.get('properties', {})
+
+        return {
+            'id': server_site.get('id', ''),
+            'name': server_site.get('name', ''),
+            'type': server_site.get('type', ''),
+            'appliance_name': properties.get('applianceName', server_site.get('name', '')),
+            'provisioning_state': properties.get('provisioningState', 'Unknown'),
+            'service_endpoint': properties.get('serviceEndpoint', ''),
+            'last_heartbeat': properties.get('agentDetails', {}).get('lastHeartBeatUtc', ''),
+            'agent_version': properties.get('agentDetails', {}).get('version', ''),
+            'discovery_scenario': properties.get('discoveryScenario', ''),
+            'health_status': self._determine_appliance_health(properties),
+            'properties': properties
+        }
+
+    def _determine_appliance_health(self, properties: Dict[str, Any]) -> str:
+        """
+        Determine appliance health status from properties
+
+        Args:
+            properties: Appliance properties
+
+        Returns:
+            Health status string
+        """
+        try:
+            # Check provisioning state
+            provisioning_state = properties.get(
+                'provisioningState', '').lower()
+            if provisioning_state != 'succeeded':
+                return 'Unhealthy'
+
+            # Check agent heartbeat (consider healthy if heartbeat within last 24 hours)
+            last_heartbeat = properties.get(
+                'agentDetails', {}).get('lastHeartBeatUtc', '')
+            if last_heartbeat:
+                from datetime import datetime, timezone, timedelta
+                try:
+                    heartbeat_time = datetime.fromisoformat(
+                        last_heartbeat.replace('Z', '+00:00'))
+                    current_time = datetime.now(timezone.utc)
+                    if current_time - heartbeat_time > timedelta(hours=24):
+                        return 'Unhealthy'
+                except Exception:
+                    pass
+
+            # Check for service endpoint
+            service_endpoint = properties.get('serviceEndpoint', '')
+            if not service_endpoint:
+                return 'Unhealthy'
+
+            return 'Healthy'
+
+        except Exception as e:
+            print(f"Error determining appliance health: {e}")
+            return 'Unknown'
+
+    def get_protection_container_mappings(
+        self,
+        resource_group: str,
+        vault_name: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Get replication protection container mappings for a Recovery Services Vault
+
+        Args:
+            resource_group: Resource group name
+            vault_name: Recovery Services Vault name
+
+        Returns:
+            List of protection container mapping dictionaries
+        """
+        path = f"/subscriptions/{self.subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.RecoveryServices/vaults/{vault_name}/replicationProtectionContainerMappings"
+
+        try:
+            return self.list_all(path, api_version="2023-06-01")
+        except Exception as e:
+            print(f"Error getting protection container mappings: {e}")
+            return []
+
+    def get_replication_fabrics(
+        self,
+        resource_group: str,
+        vault_name: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Get replication fabrics for a Recovery Services Vault
+
+        Args:
+            resource_group: Resource group name
+            vault_name: Recovery Services Vault name
+
+        Returns:
+            List of replication fabric dictionaries
+        """
+        path = f"/subscriptions/{self.subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.RecoveryServices/vaults/{vault_name}/replicationFabrics"
+
+        try:
+            return self.list_all(path, api_version="2023-06-01")
+        except Exception as e:
+            print(f"Error getting replication fabrics: {e}")
+            return []
+
+    def get_protection_containers(
+        self,
+        resource_group: str,
+        vault_name: str,
+        fabric_name: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get protection containers for a Recovery Services Vault
+
+        Args:
+            resource_group: Resource group name
+            vault_name: Recovery Services Vault name
+            fabric_name: Optional fabric name to filter containers
+
+        Returns:
+            List of protection container dictionaries
+        """
+        if fabric_name:
+            path = f"/subscriptions/{self.subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.RecoveryServices/vaults/{vault_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers"
+        else:
+            # Get all protection containers across all fabrics
+            fabrics = self.get_replication_fabrics(resource_group, vault_name)
+            all_containers = []
+            for fabric in fabrics:
+                fabric_name = fabric.get('name', '')
+                if fabric_name:
+                    containers_path = f"/subscriptions/{self.subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.RecoveryServices/vaults/{vault_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers"
+                    try:
+                        containers = self.list_all(
+                            containers_path, api_version="2023-06-01")
+                        all_containers.extend(containers)
+                    except Exception as e:
+                        print(
+                            f"Error getting containers for fabric {fabric_name}: {e}")
+            return all_containers
+
+        try:
+            return self.list_all(path, api_version="2023-06-01")
+        except Exception as e:
+            print(f"Error getting protection containers: {e}")
+            return []
+
+    def validate_replication_readiness(
+        self,
+        resource_group: str,
+        vault_name: str
+    ) -> Dict[str, Any]:
+        """
+        Validate that replication infrastructure is ready
+
+        Args:
+            resource_group: Resource group name
+            vault_name: Recovery Services Vault name
+
+        Returns:
+            Dictionary with readiness status and details
+        """
+        try:
+            # Get protection container mappings
+            mappings = self.get_protection_container_mappings(
+                resource_group, vault_name)
+
+            # Get fabrics
+            fabrics = self.get_replication_fabrics(resource_group, vault_name)
+
+            # Analyze readiness
+            healthy_mappings = 0
+            paired_mappings = 0
+            total_mappings = len(mappings)
+
+            mapping_details = []
+            for mapping in mappings:
+                properties = mapping.get('properties', {})
+                health = properties.get('health', 'Unknown')
+                state = properties.get('state', 'Unknown')
+
+                if health == 'Normal':
+                    healthy_mappings += 1
+                if state == 'Paired':
+                    paired_mappings += 1
+
+                mapping_details.append({
+                    'name': mapping.get('name', ''),
+                    'health': health,
+                    'state': state,
+                    'source_container': properties.get('sourceProtectionContainerFriendlyName', ''),
+                    'target_container': properties.get('targetProtectionContainerFriendlyName', ''),
+                    'policy': properties.get('policyFriendlyName', '')
+                })
+
+            # Determine overall readiness
+            is_ready = (
+                total_mappings > 0 and
+                healthy_mappings == total_mappings and
+                paired_mappings == total_mappings
+            )
+
+            return {
+                'ready': is_ready,
+                'total_mappings': total_mappings,
+                'healthy_mappings': healthy_mappings,
+                'paired_mappings': paired_mappings,
+                'total_fabrics': len(fabrics),
+                'mapping_details': mapping_details,
+                'summary': f"{paired_mappings}/{total_mappings} mappings paired, {healthy_mappings}/{total_mappings} healthy"
+            }
+
+        except Exception as e:
+            return {
+                'ready': False,
+                'error': str(e),
+                'summary': f"Error validating replication readiness: {str(e)}"
+            }
+
     def create_replication_item(
         self,
         resource_group: str,

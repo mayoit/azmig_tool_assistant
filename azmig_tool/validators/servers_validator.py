@@ -19,11 +19,11 @@ from ..config.validation_config import ValidationConfig
 
 
 class ServersValidator(BaseValidatorInterface):
-    """Live validator using Azure APIs"""
+    """Validator using Azure APIs"""
 
     def __init__(self, credential: Optional[DefaultAzureCredential] = None, validation_config: Optional[ValidationConfig] = None):
         """
-        Initialize live validator
+        Initialize validator
 
         Args:
             credential: Azure credential (uses DefaultAzureCredential if not provided)
@@ -72,7 +72,7 @@ class ServersValidator(BaseValidatorInterface):
         return self._clients_cache[key]
 
     def validate_region(self, config: MigrationConfig) -> ValidationResult:
-        """Live: Validate Azure region exists"""
+        """Validate Azure region exists"""
         region = config.target_region.lower().replace(" ", "")
 
         if region in AZURE_REGIONS:
@@ -80,7 +80,7 @@ class ServersValidator(BaseValidatorInterface):
                 stage=ValidationStage.AZURE_REGION,
                 passed=True,
                 message=f"✓ Region '{config.target_region}' is valid",
-                details={"region": region, "mode": "live"}
+                details={"region": region}
             )
         else:
             return ValidationResult(
@@ -89,13 +89,12 @@ class ServersValidator(BaseValidatorInterface):
                 message=f"✗ Invalid region '{config.target_region}'. Must be a valid Azure region.",
                 details={
                     "region": region,
-                    "valid_regions_sample": AZURE_REGIONS[:10],
-                    "mode": "live"
+                    "valid_regions_sample": AZURE_REGIONS[:10]
                 }
             )
 
     def validate_resource_group(self, config: MigrationConfig) -> ValidationResult:
-        """Live: Validate that resource group exists"""
+        """Validate that resource group exists"""
         try:
             client = self._get_resource_client(config.target_subscription)
             rg = client.resource_groups.get(config.target_rg)
@@ -107,8 +106,7 @@ class ServersValidator(BaseValidatorInterface):
                 details={
                     "resource_group": config.target_rg,
                     "location": rg.location,
-                    "id": rg.id,
-                    "mode": "live"
+                    "id": rg.id
                 }
             )
         except ResourceNotFoundError:
@@ -119,7 +117,7 @@ class ServersValidator(BaseValidatorInterface):
                 details={
                     "resource_group": config.target_rg,
                     "subscription": config.target_subscription,
-                    "mode": "live"
+
                 }
             )
         except HttpResponseError as e:
@@ -127,18 +125,18 @@ class ServersValidator(BaseValidatorInterface):
                 stage=ValidationStage.AZURE_RESOURCES,
                 passed=False,
                 message=f"✗ Error accessing resource group: {e.message}",
-                details={"error": str(e), "mode": "live"}
+                details={"error": str(e)}
             )
         except Exception as e:
             return ValidationResult(
                 stage=ValidationStage.AZURE_RESOURCES,
                 passed=False,
                 message=f"✗ Unexpected error validating resource group: {str(e)}",
-                details={"error": str(e), "mode": "live"}
+                details={"error": str(e)}
             )
 
     def validate_vnet_and_subnet(self, config: MigrationConfig) -> ValidationResult:
-        """Live: Validate that VNet and Subnet exist with capacity and delegation checks"""
+        """Validate that VNet and Subnet exist with capacity and delegation checks"""
         try:
             client = self._get_network_client(config.target_subscription)
 
@@ -163,7 +161,7 @@ class ServersValidator(BaseValidatorInterface):
                                 "is_delegated": True,
                                 "delegation_service": delegation_result["delegation_service"],
                                 "error": "Delegated subnets cannot host regular virtual machines",
-                                "mode": "live"
+
                             }
                         )
 
@@ -188,7 +186,7 @@ class ServersValidator(BaseValidatorInterface):
                                 "available_ips": ip_availability["available_ips"],
                                 "required_ips": ip_availability["required_ips"],
                                 "error": "Insufficient IP addresses in subnet",
-                                "mode": "live"
+
                             }
                         )
 
@@ -207,7 +205,7 @@ class ServersValidator(BaseValidatorInterface):
                             "total_ips": ip_availability["total_ips"],
                             "available_ips": ip_availability["available_ips"],
                             "used_ips": ip_availability["used_ips"],
-                            "mode": "live"
+
                         }
                     )
 
@@ -221,7 +219,7 @@ class ServersValidator(BaseValidatorInterface):
                     "vnet": config.target_vnet,
                     "requested_subnet": config.target_subnet,
                     "available_subnets": available_subnets,
-                    "mode": "live"
+
                 }
             )
 
@@ -233,7 +231,7 @@ class ServersValidator(BaseValidatorInterface):
                 details={
                     "vnet": config.target_vnet,
                     "rg": config.target_rg,
-                    "mode": "live"
+
                 }
             )
         except HttpResponseError as e:
@@ -241,14 +239,14 @@ class ServersValidator(BaseValidatorInterface):
                 stage=ValidationStage.AZURE_RESOURCES,
                 passed=False,
                 message=f"✗ Error accessing VNet: {e.message}",
-                details={"error": str(e), "mode": "live"}
+                details={"error": str(e)}
             )
         except Exception as e:
             return ValidationResult(
                 stage=ValidationStage.AZURE_RESOURCES,
                 passed=False,
                 message=f"✗ Unexpected error validating VNet/Subnet: {str(e)}",
-                details={"error": str(e), "mode": "live"}
+                details={"error": str(e)}
             )
 
     def _validate_subnet_delegation(self, subnet) -> Dict[str, Any]:
@@ -352,7 +350,7 @@ class ServersValidator(BaseValidatorInterface):
         }
 
     def validate_vm_sku(self, config: MigrationConfig) -> ValidationResult:
-        """Live: Validate that VM SKU is available in the target region"""
+        """Validate that VM SKU is available in the target region"""
         try:
             client = self._get_compute_client(config.target_subscription)
             region = config.target_region.lower().replace(" ", "")
@@ -375,7 +373,7 @@ class ServersValidator(BaseValidatorInterface):
                                 "sku": config.target_machine_sku,
                                 "region": region,
                                 "restrictions": restriction_info,
-                                "mode": "live"
+
                             }
                         )
 
@@ -387,7 +385,7 @@ class ServersValidator(BaseValidatorInterface):
                             "sku": config.target_machine_sku,
                             "region": region,
                             "capabilities": {c.name: c.value for c in sku.capabilities} if sku.capabilities else {},
-                            "mode": "live"
+
                         }
                     )
 
@@ -398,7 +396,7 @@ class ServersValidator(BaseValidatorInterface):
                 details={
                     "sku": config.target_machine_sku,
                     "region": region,
-                    "mode": "live"
+
                 }
             )
 
@@ -407,11 +405,11 @@ class ServersValidator(BaseValidatorInterface):
                 stage=ValidationStage.DISK_AND_SKU,
                 passed=False,
                 message=f"✗ Error validating VM SKU: {str(e)}",
-                details={"error": str(e), "mode": "live"}
+                details={"error": str(e)}
             )
 
     def validate_disk_type(self, config: MigrationConfig) -> ValidationResult:
-        """Live: Validate disk type is valid"""
+        """Validate disk type is valid"""
         valid_types = [dt.value for dt in DiskType]
 
         if config.target_disk_type in valid_types:
@@ -419,7 +417,7 @@ class ServersValidator(BaseValidatorInterface):
                 stage=ValidationStage.DISK_AND_SKU,
                 passed=True,
                 message=f"✓ Disk type '{config.target_disk_type}' is valid",
-                details={"disk_type": config.target_disk_type, "mode": "live"}
+                details={"disk_type": config.target_disk_type}
             )
         else:
             return ValidationResult(
@@ -429,7 +427,7 @@ class ServersValidator(BaseValidatorInterface):
                 details={
                     "disk_type": config.target_disk_type,
                     "valid_types": valid_types,
-                    "mode": "live"
+
                 }
             )
 
@@ -438,7 +436,7 @@ class ServersValidator(BaseValidatorInterface):
         config: MigrationConfig,
         user_object_id: str
     ) -> ValidationResult:
-        """Live: Validate user has Contributor role on target resource group"""
+        """Validate user has Contributor role on target resource group"""
         try:
             auth_client = self._get_auth_client(config.target_subscription)
             resource_client = self._get_resource_client(
@@ -477,7 +475,7 @@ class ServersValidator(BaseValidatorInterface):
                         "resource_group": config.target_rg,
                         "user_object_id": user_object_id,
                         "has_contributor": True,
-                        "mode": "live"
+
                     }
                 )
             else:
@@ -489,7 +487,7 @@ class ServersValidator(BaseValidatorInterface):
                         "resource_group": config.target_rg,
                         "user_object_id": user_object_id,
                         "assigned_roles": assigned_roles,
-                        "mode": "live"
+
                     }
                 )
 
@@ -498,7 +496,7 @@ class ServersValidator(BaseValidatorInterface):
                 stage=ValidationStage.RBAC_TARGET_RG,
                 passed=False,
                 message=f"✗ Error validating RBAC for resource group: {str(e)}",
-                details={"error": str(e), "mode": "live"}
+                details={"error": str(e)}
             )
 
     def validate_discovery(
@@ -506,7 +504,7 @@ class ServersValidator(BaseValidatorInterface):
         config: MigrationConfig,
         project: AzureMigrateProject
     ) -> ValidationResult:
-        """Live: Validate that source machine is discovered in Azure Migrate project"""
+        """Validate that source machine is discovered in Azure Migrate project"""
         try:
             from ..clients.azure_client import AzureMigrateApiClient
 
@@ -539,7 +537,7 @@ class ServersValidator(BaseValidatorInterface):
                             "os": properties.get('operatingSystemType') or properties.get('operatingSystemName'),
                             "cores": properties.get('numberOfCores') or properties.get('cores'),
                             "memory_mb": properties.get('megabytesOfMemory') or properties.get('memoryInMB'),
-                            "mode": "live"
+
                         }
                     )
 
@@ -551,7 +549,7 @@ class ServersValidator(BaseValidatorInterface):
                 details={
                     "machine_name": search_name,
                     "project": project.name,
-                    "mode": "live"
+
                 }
             )
 
@@ -560,5 +558,5 @@ class ServersValidator(BaseValidatorInterface):
                 stage=ValidationStage.MIGRATE_DISCOVERY,
                 passed=False,
                 message=f"✗ Error validating machine discovery: {str(e)}",
-                details={"error": str(e), "mode": "live"}
+                details={"error": str(e)}
             )

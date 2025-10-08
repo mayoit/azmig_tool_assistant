@@ -53,6 +53,7 @@ LANDING_ZONE_CSV_COLUMNS = [
     "Appliance Name",
     "Region",
     "Cache Storage Account",
+    "Cache Storage Resource Group",
     "Migrate Project Subscription",
     "Migrate Resource Group"
 ]
@@ -95,6 +96,62 @@ SERVERS_COLUMN_MAPPING = {
     "Target Subnet": "target_subnet",
     "Target Machine SKU": "target_machine_sku",
     "Target Disk Type": "target_disk_type",
+    "Source Machine": "source_machine_name",
+    "Recovery Vault Name": "recovery_vault_name"
+}
+
+# =============================================================================
+# Consolidated Server Template Columns (Landing Zone + Server)
+# =============================================================================
+
+CONSOLIDATED_REQUIRED_COLUMNS = [
+    # Landing Zone columns
+    "Migrate Project Subscription",
+    "Migrate Project Name", 
+    "Appliance Type",
+    "Appliance Name",
+    "Cache Storage Account",
+    "Cache Storage Resource Group",
+    "Migrate Resource Group",
+    
+    # Server columns  
+    "Target Machine",
+    "Target Region",
+    "Target Subscription",
+    "Target RG",
+    "Target VNet",
+    "Target Subnet",
+    "Target Machine SKU",
+    "Target Disk Type"
+]
+
+CONSOLIDATED_OPTIONAL_COLUMNS = [
+    "Source Machine",
+    "Recovery Vault Name"
+]
+
+# Column mapping for consolidated template
+CONSOLIDATED_COLUMN_MAPPING = {
+    # Landing Zone fields
+    "Migrate Project Subscription": "migrate_project_subscription",
+    "Migrate Project Name": "migrate_project_name",
+    "Appliance Type": "appliance_type", 
+    "Appliance Name": "appliance_name",
+    "Cache Storage Account": "cache_storage_account",
+    "Cache Storage Resource Group": "cache_storage_resource_group",
+    "Migrate Resource Group": "migrate_resource_group",
+    
+    # Server fields
+    "Target Machine": "target_machine_name",
+    "Target Region": "target_region",
+    "Target Subscription": "target_subscription",
+    "Target RG": "target_rg",
+    "Target VNet": "target_vnet",
+    "Target Subnet": "target_subnet",
+    "Target Machine SKU": "target_machine_sku",
+    "Target Disk Type": "target_disk_type",
+    
+    # Optional fields
     "Source Machine": "source_machine_name",
     "Recovery Vault Name": "recovery_vault_name"
 }

@@ -6,18 +6,18 @@ This guide provides a quick reference for all interactive prompts, options, and 
 
 ## Command Line Entry Points
 
-| Command | Description | Mode |
-|---------|-------------|------|
-| `azmig` | Interactive mode selection | Prompts for live/mock |
-| `azmig --live` | Live Azure mode | Requires authentication |
-| `azmig --mock` | Mock mode (offline) | No authentication |
-| `azmig --create-default-config` | Create default config | Creates `validation_config.yaml` and exits |
+| Command | Description |
+|---------|-------------|
+| `azmig` | Interactive Azure migration tool |
+| `azmig --help` | Display help information |
+| `azmig --create-default-config` | Create default config |
+| `azmig --non-interactive` | Non-interactive mode |
 
 ---
 
 ## Operation Types
 
-| # | Operation | Required Files | Auth Required (Live) | Description |
+| # | Operation | Required Files | Auth Required | Description |
 |---|-----------|----------------|----------------------|-------------|
 | 1 | Landing Zone Validation | LZ file (CSV/JSON) | ✓ Yes | Validates Azure Migrate project readiness |
 | 2 | Server Validation | Excel file | ✓ Yes | Validates individual server configurations |
@@ -155,7 +155,7 @@ The tool automatically searches for:
 
 ---
 
-## Authentication Methods (Live Mode)
+## Authentication Methods
 
 | # | Method | Description | Required Parameters |
 |---|--------|-------------|---------------------|
@@ -170,32 +170,30 @@ The tool automatically searches for:
 
 ## Common Workflows
 
-### Workflow 1: Quick Mock Test
+### Workflow 1: Quick Configuration Test
 
 ```bash
-# Start mock mode
-azmig --mock
+# Start interactive tool
+azmig
 
 # Prompts:
-# Select: 1 (Landing Zone Validation)
+# Select: 4 (Configure Validations)
 # Config: Y (Create default)
 # Profile: 2 (Quick)
-# File format: csv
-# Use template: Y
-# Export JSON: N
-# Proceed: Y
+# Landing Zone Validations: [Y/n for each]
+# Server Validations: [Y/n for each]
+# Save: Y
 
-# Result: Mock validation report displayed
+# Result: Configuration created successfully
 ```
 
 ### Workflow 2: Production Server Validation
 
 ```bash
-# Start live mode
-azmig --live
+# Start Azure validation
+azmig
 
 # Prompts:
-# Mode: live
 # Select: 2 (Server Validation)
 # Auth: 1 (azure_cli)
 # Config: Y (Use existing validation_config.yaml)
@@ -204,14 +202,14 @@ azmig --live
 # Export JSON: Y → results.json
 # Proceed: Y
 
-# Result: Live validation with JSON export
+# Result: Azure validation with JSON export
 ```
 
 ### Workflow 3: Configure Validations Only
 
 ```bash
-# Start in any mode
-azmig --mock
+# Start configuration wizard
+azmig
 
 # Prompts:
 # Select: 4 (Configure Validations)
@@ -227,8 +225,8 @@ azmig --mock
 ### Workflow 4: Full Migration Wizard
 
 ```bash
-# Start live mode
-azmig --live
+# Start full migration wizard
+azmig
 
 # Prompts:
 # Select: 5 (Full Wizard)
@@ -296,7 +294,7 @@ When prompted `Export results to JSON? [y/N]`:
 {
   "operation": "lz_validation",
   "timestamp": "2025-10-06T10:30:00Z",
-  "mode": "mock",
+  "azure_integration": true,
   "results": [
     {
       "landing_zone": "LZ-EastUS",
@@ -337,10 +335,11 @@ When prompted `Export results to JSON? [y/N]`:
 
 ## Tips & Best Practices
 
-### 1. Start with Mock Mode
+### 1. Start with Configuration
 ```bash
-# Always test with mock mode first
-azmig --mock
+# Always configure validations first
+azmig
+# Select: 4 (Configure Validations)
 ```
 
 ### 2. Use Templates
@@ -416,17 +415,17 @@ azmig --help
 
 ```
 QUICK START:
-1. azmig --mock                    → Start in test mode
+1. azmig                           → Start interactive tool
 2. Select operation (1-5)          → Choose what to do
 3. Follow prompts                  → Enter required info
 4. Review summary                  → Verify before execution
 5. Proceed                         → Execute operation
 
 COMMON COMMANDS:
-azmig                              → Interactive mode
-azmig --mock                       → Mock mode
-azmig --live                       → Live mode
+azmig                              → Interactive tool
+azmig --help                       → Show help
 azmig --create-default-config      → Create config
+azmig --non-interactive            → Non-interactive mode
 
 OPERATIONS:
 1 = Landing Zone Validation

@@ -2,7 +2,7 @@
 import argparse
 from rich.console import Console
 
-from .modes.mode import run_mode
+from .core import run_migration_tool
 
 console = Console()
 
@@ -10,16 +10,16 @@ console = Console()
 def main():
     parser = argparse.ArgumentParser(
         prog="azmig",
-        description="Azure Bulk Migration CLI - Migrate servers from DC to Azure (interactive wizard with live Azure integration)"
+        description="Azure Bulk Migration CLI - Migrate servers from DC to Azure (interactive wizard with Azure integration)"
     )
 
-    # Authentication options (optional - will prompt if not provided in live mode)
+    # Authentication options (optional - interactive prompts available)
     parser.add_argument(
         "--auth-method",
         type=str,
         choices=["azure_cli", "managed_identity", "service_principal",
                  "interactive", "device_code", "default"],
-        help="Authentication method for live mode (optional - will prompt if not specified)"
+        help="Authentication method (optional - will prompt if not specified)"
     )
     parser.add_argument(
         "--tenant-id",
@@ -99,9 +99,9 @@ def main():
             console.print(f"[yellow]WARNING[/yellow] {e}")
         return
 
-    # Always run in live mode with Azure integration
+    # Always run with Azure integration
     console.print("\n[bold cyan]🛠️  Azure Bulk Migration Tool[/bold cyan]")
-    console.print("[dim]Live Azure Integration Mode[/dim]\n")
+    console.print("[dim]Azure Integration[/dim]\n")
 
     # Gather parameters from CLI args
     provided_params = {
@@ -120,7 +120,7 @@ def main():
     # Use interactive prompts if not in non-interactive mode
     if not args.non_interactive:
         from .interactive_prompts import get_interactive_inputs
-        params = get_interactive_inputs("live", provided_params)
+        params = get_interactive_inputs("azure", provided_params)
     else:
         # Non-interactive mode - require all necessary parameters
         params = provided_params
@@ -141,8 +141,8 @@ def main():
         console.print("\n[green]✓[/green] Validation configuration complete!")
         return
 
-    # Always run in live mode with Azure integration
-    run_mode(
+    # Always run with Azure integration
+    run_migration_tool(
         excel_path=params.get('excel'),
         export_json=params.get('export_json'),
         validation_config_path=params.get('validation_config'),

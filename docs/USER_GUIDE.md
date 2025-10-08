@@ -471,22 +471,23 @@ global_settings:
 ### Landing Zone File (CSV)
 
 **Required Columns:**
-- Subscription ID
+- Subscription ID (target subscription for migrated resources)
 - Migrate Project Name
 - Appliance Type (vmware/hyperv/physical)
 - Appliance Name
 - Region
 - Cache Storage Account
-- Migrate Project Subscription
-- Migrate Resource Group
+- Cache Storage Resource Group (resource group containing the storage account)
+- Migrate Project Subscription (subscription containing the Azure Migrate project)
+- Migrate Resource Group (resource group containing the Azure Migrate project)
 
 **Optional Columns:**
 - Recovery Vault Name
 
 **Example:**
 ```csv
-Subscription ID,Migrate Project Name,Appliance Type,Appliance Name,Region,Cache Storage Account,Migrate Project Subscription,Migrate Resource Group,Recovery Vault Name
-12345678-1234-1234-1234-123456789012,MigrateProject-EastUS,vmware,MigrateAppliance-VMware-EastUS,eastus,cachestorage001,12345678-1234-1234-1234-123456789012,migrate-rg,RecoveryVault-EastUS
+Subscription ID,Migrate Project Name,Appliance Type,Appliance Name,Region,Cache Storage Account,Cache Storage Resource Group,Migrate Project Subscription,Migrate Resource Group,Recovery Vault Name
+12345678-1234-1234-1234-123456789012,MigrateProject-EastUS,vmware,MigrateAppliance-VMware-EastUS,eastus,cachestorage001,rg-storage-eastus,12345678-1234-1234-1234-123456789012,migrate-rg,RecoveryVault-EastUS
 ```
 
 ### Landing Zone File (JSON)
@@ -501,6 +502,7 @@ Subscription ID,Migrate Project Name,Appliance Type,Appliance Name,Region,Cache 
       "appliance_name": "MigrateAppliance-VMware-EastUS",
       "region": "eastus",
       "cache_storage_account": "cachestorage001",
+      "cache_storage_resource_group": "rg-storage-eastus",
       "migrate_project_subscription": "12345678-1234-1234-1234-123456789012",
       "migrate_resource_group": "migrate-rg",
       "recovery_vault_name": "RecoveryVault-EastUS"
@@ -509,19 +511,64 @@ Subscription ID,Migrate Project Name,Appliance Type,Appliance Name,Region,Cache 
 }
 ```
 
-### Server Configuration File (Excel)
+### Server Configuration File
+
+The tool supports two Excel template formats:
+
+#### 1. Consolidated Template (Recommended)
+Combines both Landing Zone and Server configurations in a single Excel file.
+
+**Landing Zone Columns:**
+- Migrate Project Subscription (subscription containing the Azure Migrate project)
+- Migrate Project Name
+- Appliance Type (vmware/hyperv/physical)
+- Appliance Name
+- Cache Storage Account
+- Cache Storage Resource Group
+- Migrate Resource Group
+
+**Server Columns:**
+- Target Machine
+- Target Region
+- Target Subscription (target subscription for migrated resources)
+- Target RG
+- Target VNet
+- Target Subnet
+- Target Machine SKU
+- Target Disk Type
+
+**Optional Columns:**
+- Source Machine
+- Recovery Vault Name
+
+**Template:** `examples/consolidated_migration_template.xlsx`
+
+**Benefits:**
+- Single file contains all information needed for validation
+- Automatic Landing Zone validation before server validation
+- Eliminates need for separate Landing Zone files
+- Ensures consistency between Landing Zone and server configurations
+
+#### 2. Traditional Server Template
+Contains only server-specific configurations (requires separate Landing Zone file).
 
 **Required Columns:**
 - Target Machine
 - Target Region
-- Target Resource Group
+- Target Subscription
+- Target RG
 - Target VNet
 - Target Subnet
-- Target VM SKU
-- OS Disk Type
-- Data Disk Type
+- Target Machine SKU
+- Target Disk Type
+
+**Optional Columns:**
+- Source Machine
+- Recovery Vault Name
 
 **Template:** `examples/template_migrate_projects.csv`
+
+**Note:** When using traditional template, you must also provide a separate Landing Zone CSV/JSON file.
 
 ---
 
@@ -725,7 +772,41 @@ Validating Landing Zone: MigrateProject-EastUS
 
 ## Server Validation Workflow
 
-### Step-by-Step Flow
+### Auto-Detection of Template Format
+
+The tool automatically detects whether you're using:
+- **Consolidated Template**: Contains both Landing Zone and Server columns
+- **Traditional Template**: Contains only Server columns
+
+### Consolidated Template Workflow
+
+When using the recommended consolidated template:
+
+#### 1. Template Detection
+```
+📋 Server Configuration  
+Detected consolidated Excel template (Landing Zone + Servers)
+```
+
+#### 2. Two-Phase Validation
+**Phase 1: Landing Zone Validation**
+- Extracts unique Landing Zone configurations from Excel
+- Validates Azure Migrate projects, appliances, storage, and quotas
+- Must pass before proceeding to server validation
+
+**Phase 2: Server Validation**
+- Only runs if Landing Zone validation passes
+- Validates each server configuration individually
+- Uses context from successful Landing Zone validation
+
+#### 3. Integrated Results
+- Combined validation results from both phases
+- Clear indication of which phase caused any failures
+- Servers are skipped if their Landing Zone validation failed
+
+### Traditional Template Workflow
+
+When using traditional server-only template:
 
 #### 1. Validation Configuration
 
@@ -760,6 +841,37 @@ Same as Landing Zone workflow.
 
 #### 4. Validation Execution
 
+**Consolidated Template Example:**
+```
+Running Consolidated Server Validation
+
+Step 1: Validating 2 unique Landing Zone configurations
+
+Validating Landing Zone: MigrateProject-EastUS
+  Region: eastus | Appliance: MigrateAppliance-VMware-EastUS (vmware)
+
+✓ Overall Status: OK
+
+Step 2: Validating 150 server configurations
+
+Validating: WEB-SERVER-01
+  Region: eastus | RG: rg-production | SKU: Standard_D4s_v3
+  Associated LZ: MigrateProject-EastUS ✓
+
+✓ Region validated
+✓ Resource group exists  
+✓ VNet and subnet available
+✓ VM SKU compatible
+✓ Disk types supported
+✓ Server discovered in Azure Migrate
+✓ RBAC permissions verified
+
+✓ Overall Status: OK
+
+Progress: 1/150 complete
+```
+
+**Traditional Template Example:**
 ```
 Running Server Validation Only
 
@@ -1537,7 +1649,9 @@ pip install --force-reinstall azmig-tool
 This guide covers:
 
 ✅ **5 Operation Types** - From quick validation to full migration
-✅ **6 Authentication Methods** - Maximum flexibility for any environment
+✅ **6 Authentication Methods** - Maximum flexibility for any environment  
+✅ **Consolidated Templates** - Single Excel file with both Landing Zone and Server configurations
+✅ **Two-Phase Validation** - Automatic Landing Zone validation before Server validation
 ✅ **Interactive Workflows** - Step-by-step guidance through each process
 ✅ **Visual Diagrams** - Flowcharts and sequence diagrams for clarity
 ✅ **Fail-Fast Validation** - Intelligent error handling and early failure detection
@@ -1551,7 +1665,8 @@ This guide covers:
 | Create config | `azmig --create-default-config` |
 | Test offline | `azmig --mock` |
 | Validate LZ | `azmig --live --operation lz_validation --lz-file <file>` |
-| Validate servers | `azmig --live --operation server_validation --excel <file>` |
+| Validate servers (consolidated) | `azmig --live --operation server_validation --excel <consolidated-file>` |
+| Validate servers (traditional) | `azmig --live --operation server_validation --excel <servers-file>` |
 | Full migration | `azmig --live --operation full_wizard` |
 | Interactive mode | `azmig --live` |
 

@@ -18,7 +18,7 @@ Write-Host "  - examples\template_landing_zones.json (Landing Zone config)" -For
 Write-Host "  - examples\servers.csv                  (Server mappings)" -ForegroundColor Gray
 
 Write-Host "`nManual Test Commands:" -ForegroundColor Yellow
-Write-Host "`n1. Test Interactive Mode:" -ForegroundColor Cyan
+Write-Host "`n1. Test Interactive Wizard:" -ForegroundColor Cyan
 Write-Host "   azmig" -ForegroundColor White
 Write-Host "   Then select options interactively`n" -ForegroundColor Gray
 

@@ -35,11 +35,17 @@ azmig_tool/
 - **Core Features**
   - Two-layer validation (Landing Zone + Servers)
   - Interactive wizard workflow
-  - Mock and Live modes
   - YAML-based validation configuration
   - Excel-based server configuration
   - Multi-authentication support (6 methods)
   - Rich CLI interface with progress indicators
+  
+- **Latest Improvements (October 2025)**
+  - ✅ **Enhanced Appliance Detection**: Multi-strategy API approach with Resource Graph integration
+  - ✅ **Simplified Architecture**: Removed mock/live mode complexity for unified Azure integration
+  - ✅ **Better Error Handling**: Azure API error reporting with trace IDs and retry mechanisms
+  - ✅ **Storage Account Flexibility**: Added separate cache storage resource group field for dedicated storage accounts
+  - ✅ **Subscription Accuracy**: Fixed appliance detection to use correct migrate project subscription and resource group
   
 - **Modular Architecture**
   - Purpose-specific modules: clients/, config/, formatters/, base/

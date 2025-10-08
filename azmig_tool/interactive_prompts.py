@@ -193,7 +193,7 @@ class InteractivePrompter:
                 if use_default:
                     return path
 
-        return self.prompt_file_path("Excel (servers)")
+        return self.prompt_file_path("Excel (servers)")  # type: ignore
 
     def prompt_export_json(self) -> Optional[str]:
         """Prompt for JSON export path."""
@@ -496,7 +496,7 @@ def get_interactive_inputs(mode: str, provided_params: Dict[str, Any]) -> Dict[s
     Main function to gather all required inputs interactively.
 
     Args:
-        mode: 'live' or 'mock'
+        mode: Azure integration mode (unused parameter for compatibility)
         provided_params: Parameters already provided via CLI
 
     Returns:

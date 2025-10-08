@@ -1,5 +1,5 @@
 """
-Live mode - Azure Bulk Migration with Azure API integration
+Azure Bulk Migration Tool - Core functionality
 """
 from typing import Optional, List
 from pathlib import Path
@@ -7,19 +7,19 @@ from rich.console import Console
 from rich.table import Table
 from rich import box
 from rich.panel import Panel
-from ..wizard import MigrationWizard
-from ..config.validation_config import get_validation_config, reset_validation_config
-from ..auth import get_azure_credential
-from ..config.parsers import ConfigParser
-from ..validators.landing_zone_validator import LandingZoneValidator
-from ..models import MigrateProjectConfig, ValidationStatus
+from .wizard import MigrationWizard
+from .config.validation_config import get_validation_config, reset_validation_config
+from .auth import get_azure_credential
+from .config.parsers import ConfigParser
+from .validators.landing_zone_validator import LandingZoneValidator
+from .models import MigrateProjectConfig, ValidationStatus
 import json
 from datetime import datetime
 
 console = Console()
 
 
-def run_live_mode(
+def run_migration_tool(
     excel_path: Optional[str] = None,
     export_json: Optional[str] = None,
     validation_config_path: Optional[str] = None,
@@ -32,7 +32,7 @@ def run_live_mode(
     lz_file: Optional[str] = None
 ):
     """
-    Run migration wizard in live mode with Azure API integration
+    Run migration wizard with Azure API integration
 
     Args:
         excel_path: Path to Excel file with migration configurations
@@ -46,7 +46,7 @@ def run_live_mode(
         operation: Operation type (lz_validation, server_validation, replication, full_wizard)
         lz_file: Path to Landing Zone CSV/JSON file
     """
-    console.rule("[bold green]Live Mode - Azure Integration[/bold green]")
+    console.rule("[bold green]Azure Integration[/bold green]")
 
     # Authenticate to Azure
     console.print("\n[bold cyan]🔐 Azure Authentication[/bold cyan]\n")
@@ -123,7 +123,7 @@ def run_live_mode(
 
 def run_landing_zone_validation(lz_file: str, credential, validation_config_path: Optional[str], export_json: Optional[str]):
     """
-    Run Landing Zone-only validation in live mode
+    Run Landing Zone-only validation
 
     Args:
         lz_file: Path to Landing Zone CSV/JSON file
@@ -265,7 +265,6 @@ def _export_lz_results(results: List[tuple], export_path: str):
     """Export Landing Zone validation results to JSON"""
     export_data = {
         "timestamp": datetime.now().isoformat(),
-        "mode": "live",
         "operation": "landing_zone_validation",
         "total_landing_zones": len(results),
         "results": []

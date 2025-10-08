@@ -38,6 +38,7 @@ class ValidationStage(str, Enum):
     MIGRATE_DISCOVERY = "migrate_discovery"
     RBAC_TARGET_RG = "rbac_target_rg"
     RBAC_RECOVERY_VAULT = "rbac_recovery_vault"
+    LANDING_ZONE_DEPENDENCY = "landing_zone_dependency"
 
 
 # ============================================================================
@@ -106,6 +107,97 @@ class MigrationConfig:
 
 
 @dataclass
+class ConsolidatedMigrationConfig:
+    """Consolidated configuration for both Landing Zone and Server migration"""
+    # Landing Zone fields (from MigrateProjectConfig)
+    migrate_project_subscription: str  # Subscription where Migrate project resides
+    migrate_project_name: str
+    appliance_type: str
+    appliance_name: str
+    cache_storage_account: str
+    cache_storage_resource_group: str
+    migrate_resource_group: str
+
+    # Server migration fields (from MigrationConfig)
+    target_machine_name: str
+    target_region: str
+    target_subscription: str
+    target_rg: str
+    target_vnet: str
+    target_subnet: str
+    target_machine_sku: str
+    target_disk_type: str
+
+    # Optional fields for both
+    source_machine_name: Optional[str] = None
+    recovery_vault_name: Optional[str] = None
+
+    def __post_init__(self):
+        """Validate basic field formats"""
+        # Normalize region
+        self.target_region = self.target_region.lower().strip()
+        
+        # Validate machine name (Azure naming rules)
+        import re
+        if not re.match(r'^[a-zA-Z0-9-]{1,64}$', self.target_machine_name):
+            raise ValueError(
+                f"Invalid target_machine_name: {self.target_machine_name}. "
+                "Must match ^[a-zA-Z0-9-]{{1,64}}$"
+            )
+
+        # Validate disk type
+        if self.target_disk_type not in [dt.value for dt in DiskType]:
+            raise ValueError(
+                f"Invalid disk type: {self.target_disk_type}. "
+                f"Must be one of {[dt.value for dt in DiskType]}"
+            )
+
+    @property
+    def appliance_type_enum(self) -> ApplianceType:
+        """Convert appliance type string to enum"""
+        type_map = {
+            "vmware": ApplianceType.VMWARE,
+            "hyperv": ApplianceType.HYPERV,
+            "physical": ApplianceType.PHYSICAL,
+            "agentless": ApplianceType.AGENTLESS,
+            "agent-based": ApplianceType.AGENT_BASED,
+            "agent based": ApplianceType.AGENT_BASED,
+            "other": ApplianceType.OTHER
+        }
+        return type_map.get(self.appliance_type.lower().strip(), ApplianceType.OTHER)
+
+    def to_migrate_project_config(self) -> 'MigrateProjectConfig':
+        """Extract Landing Zone configuration"""
+        return MigrateProjectConfig(
+            subscription_id=self.target_subscription,  # Use target subscription for project
+            migrate_project_name=self.migrate_project_name,
+            appliance_type=self.appliance_type,
+            appliance_name=self.appliance_name,
+            region=self.target_region,
+            cache_storage_account=self.cache_storage_account,
+            cache_storage_resource_group=self.cache_storage_resource_group,
+            migrate_project_subscription=self.migrate_project_subscription,
+            migrate_resource_group=self.migrate_resource_group,
+            recovery_vault_name=self.recovery_vault_name
+        )
+
+    def to_migration_config(self) -> 'MigrationConfig':
+        """Extract Server migration configuration"""
+        return MigrationConfig(
+            target_machine_name=self.target_machine_name,
+            target_region=self.target_region,
+            target_subscription=self.target_subscription,
+            target_rg=self.target_rg,
+            target_vnet=self.target_vnet,
+            target_subnet=self.target_subnet,
+            target_machine_sku=self.target_machine_sku,
+            target_disk_type=self.target_disk_type,
+            source_machine_name=self.source_machine_name,
+            recovery_vault_name=self.recovery_vault_name
+        )
+
+
+@dataclass
 class ValidationResult:
     """Result of a validation stage"""
     stage: ValidationStage
@@ -164,6 +256,7 @@ class MigrateProjectConfig:
     cache_storage_account: str
     migrate_project_subscription: str  # Subscription where Migrate project resides
     migrate_resource_group: str
+    cache_storage_resource_group: str  # Resource group for cache storage account
 
     # Optional fields
     recovery_vault_name: Optional[str] = None
