@@ -171,11 +171,41 @@ class BaseValidatorInterface(ABC):
                     self.validate_discovery(config, project))
 
             # RBAC validation (requires user_object_id)
-            if self.validation_config.is_rbac_validation_enabled() and user_object_id:
+            if self.validation_config.is_servers_rbac_validation_enabled() and user_object_id:
                 machine_results.append(
                     self.validate_rbac_resource_group(config, user_object_id)
                 )
 
-            results[config.target_machine_name] = machine_results
+            results[config.machine_name] = machine_results
 
         return results
+
+    def validate_machine_config(self, config: MigrationConfig) -> List[ValidationResult]:
+        """
+        Validate a single machine configuration (convenience method for intelligent validation)
+
+        Args:
+            config: Migration configuration to validate
+
+        Returns:
+            List of validation results for this machine
+        """
+        machine_results = []
+
+        # Run enabled validations
+        if self.validation_config.is_region_validation_enabled():
+            machine_results.append(self.validate_region(config))
+
+        if self.validation_config.is_resource_group_validation_enabled():
+            machine_results.append(self.validate_resource_group(config))
+
+        if self.validation_config.is_vnet_subnet_validation_enabled():
+            machine_results.append(self.validate_vnet_and_subnet(config))
+
+        if self.validation_config.is_vm_sku_validation_enabled():
+            machine_results.append(self.validate_vm_sku(config))
+
+        if self.validation_config.is_disk_type_validation_enabled():
+            machine_results.append(self.validate_disk_type(config))
+
+        return machine_results

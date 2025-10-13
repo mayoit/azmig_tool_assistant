@@ -154,7 +154,7 @@ class EnhancedTableFormatter:
 
             table.add_row(
                 str(idx),
-                report.config.target_machine_name,
+                report.config.machine_name,
                 report.config.target_region,
                 report.config.target_machine_sku,
                 report.config.target_rg,
@@ -225,9 +225,7 @@ class EnhancedTableFormatter:
             ar = result.access_result
             console.print(
                 f"  Migrate Project: {'✅' if ar.has_contributor_migrate_project else '❌'} {ar.details.get('migrate_project', 'Unknown')}")
-            if result.config.recovery_vault_name:
-                console.print(
-                    f"  Recovery Vault: {'✅' if ar.has_contributor_recovery_vault else '❌'} {ar.details.get('recovery_vault', 'Unknown')}")
+            # Recovery vault validation removed - will be auto-discovered from migrate project
             console.print(
                 f"  Subscription: {'✅' if ar.has_reader_subscription else '❌'} {ar.details.get('subscription', 'Unknown')}")
             console.print()

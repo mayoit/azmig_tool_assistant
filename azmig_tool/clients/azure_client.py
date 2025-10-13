@@ -4,7 +4,6 @@ Azure REST API clients for Azure management and Azure Migrate operations
 from typing import Dict, Any, Optional, List
 from urllib.parse import urljoin, urlparse
 import json
-from azure.identity import DefaultAzureCredential
 from azure.core.credentials import TokenCredential
 from azure.core.exceptions import HttpResponseError
 import requests
@@ -95,8 +94,15 @@ class AzureRestApiClient:
         url = self._build_url(path)
         headers = self._get_headers()
 
-        # Build query parameters
-        query_params = {"api-version": api_version or self.API_VERSION}
+        # Check if path already has query parameters
+        from urllib.parse import urlparse, parse_qs
+        parsed_url = urlparse(url)
+        existing_params = parse_qs(parsed_url.query)
+
+        # Build query parameters only if api-version is not already present
+        query_params = {}
+        if 'api-version' not in existing_params:
+            query_params["api-version"] = api_version or self.API_VERSION
         if params:
             query_params.update(params)
 
@@ -286,8 +292,8 @@ class AzureMigrateApiClient(AzureRestApiClient):
     API Reference: https://learn.microsoft.com/en-us/rest/api/migrate/
     """
 
-    # Azure Migrate API version
-    API_VERSION = "2019-10-01"
+    # Azure Migrate API version - Updated to supported version
+    API_VERSION = "2020-05-01"
 
     def __init__(self, credential, subscription_id: str):
         """
@@ -298,6 +304,8 @@ class AzureMigrateApiClient(AzureRestApiClient):
             subscription_id: Azure subscription ID
         """
         super().__init__(credential, subscription_id)
+        # Cache for discovered machines to avoid repeated API calls
+        self._machines_cache = {}  # Format: {project_key: machines_list}
 
     def list_projects(self, resource_group: Optional[str] = None) -> List[Dict[str, Any]]:
         """
@@ -363,48 +371,219 @@ class AzureMigrateApiClient(AzureRestApiClient):
     def list_discovered_machines(
         self,
         resource_group: str,
-        project_name: str
+        project_name: str,
+        use_cache: bool = True
     ) -> List[Dict[str, Any]]:
         """
-        List discovered machines in an Azure Migrate project
-
-        Note: This uses the Assessment API to get discovered machines
+        List discovered machines using migrateProjects API (authoritative source)
 
         Args:
             resource_group: Resource group name
             project_name: Project name
+            use_cache: Whether to use cached results (default: True)
 
         Returns:
-            List of discovered machine dictionaries
+            List of discovered machine dictionaries from migrateProjects API
         """
-        # First, try to get the assessment project
-        assessment_path = f"/subscriptions/{self.subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Migrate/assessmentProjects/{project_name}"
+        # Create cache key for this project
+        cache_key = f"{self.subscription_id}:{resource_group}:{project_name}"
+
+        # Return cached results if available and requested
+        if use_cache and cache_key in self._machines_cache:
+            cached_machines = self._machines_cache[cache_key]
+            print(
+                f"🚀 Using cached machines data ({len(cached_machines)} machines)")
+            return cached_machines
+
+        # Use migrateProjects API as the authoritative source for machine list
+        migrate_path = f"/subscriptions/{self.subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Migrate/migrateProjects/{project_name}"
 
         try:
-            # List machines using assessment API
-            machines_path = f"{assessment_path}/machines"
-            machines = self.list_all(machines_path, api_version="2019-10-01")
+            # List machines using migrateProjects API with correct version
+            machines_path = f"{migrate_path}/machines"
+            machines = self.list_all(
+                machines_path, api_version="2018-09-01-preview")
+            print(f"Found {len(machines)} machines via migrateProjects API")
+
+            # Cache the results for future use
+            self._machines_cache[cache_key] = machines
+            print(
+                f"💾 Cached {len(machines)} machines for project {project_name}")
+
             return machines
         except Exception as e:
-            print(f"Error listing discovered machines: {e}")
-            # Try alternative path with groups
-            try:
-                groups_path = f"{assessment_path}/groups"
-                groups = self.list_all(groups_path, api_version="2019-10-01")
+            print(f"migrateProjects API failed: {e}")
+            return []
 
-                # Get machines from each group
-                all_machines = []
-                for group in groups:
-                    group_name = group.get('name', '')
-                    machines_in_group_path = f"{assessment_path}/groups/{group_name}/assessedMachines"
-                    machines = self.list_all(
-                        machines_in_group_path, api_version="2019-10-01")
-                    all_machines.extend(machines)
+    def _add_discovery_status(self, machine: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Add discovery status information to a machine record
+        
+        Args:
+            machine: Machine dictionary from Azure API
+            
+        Returns:
+            Machine dictionary with _discovery_status added
+        """
+        properties = machine.get("properties", {})
+        migration_data = properties.get("migrationData", [])
+        discovery_data = properties.get("discoveryData", [])
+        assessment_data = properties.get("assessmentData", [])
+        
+        machine["_discovery_status"] = {
+            "migration_ready": len(migration_data) > 0,
+            "discovered": len(discovery_data) > 0 or len(migration_data) > 0,
+            "migration_records": len(migration_data),
+            "discovery_records": len(discovery_data),
+            "assessment_records": len(assessment_data)
+        }
+        
+        return machine
 
-                return all_machines
-            except Exception as e2:
-                print(f"Error with alternative path: {e2}")
+    def search_machines_by_name(
+        self,
+        resource_group: str,
+        project_name: str,
+        machine_name: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Search for a specific machine by name using the individual machine API endpoint
+
+        Uses the API: GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/migrateProjects/{migrateProjectName}/machines/{machineName}?api-version=2018-09-01-preview
+
+        Args:
+            resource_group: Resource group name
+            project_name: Project name
+            machine_name: Machine name to search for
+
+        Returns:
+            List of matching machine dictionaries (single machine if found)
+        """
+        # Try direct API call to the specific machine endpoint
+        machine_path = f"/subscriptions/{self.subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Migrate/migrateProjects/{project_name}/machines/{machine_name}"
+
+        try:
+            # Make direct API call to get specific machine
+            machine_data = self.get(machine_path, api_version="2018-09-01-preview")
+            
+            if machine_data:
+                properties = machine_data.get("properties", {})
+                
+                # Check if machine has migrationData (indicates it's discoverable by migration appliance)
+                migration_data = properties.get("migrationData", [])
+                discovery_data = properties.get("discoveryData", [])
+                assessment_data = properties.get("assessmentData", [])
+                
+                # Log the discovery status
+                if migration_data:
+                    print(f"✅ Machine '{machine_name}' found with migration data ({len(migration_data)} records) - migration-ready")
+                elif discovery_data:
+                    print(f"📋 Machine '{machine_name}' found with discovery data ({len(discovery_data)} records) - discovered only")
+                else:
+                    print(f"⚠️ Machine '{machine_name}' found but no migration or discovery data")
+                
+                # Add discovery status to machine data for validation logic
+                machine_data = self._add_discovery_status(machine_data)
+                
+                return [machine_data]  # Return as list for consistency with other search methods
+                
+        except HttpResponseError as e:
+            if "404" in str(e) or "NotFound" in str(e):
+                print(f"❌ Machine '{machine_name}' not found in project '{project_name}'")
                 return []
+            else:
+                print(f"❌ API error searching for machine '{machine_name}': {e}")
+                # Fall back to list-based search on other errors
+                
+        except Exception as e:
+            print(f"❌ Error searching for machine '{machine_name}': {e}")
+            # Fall back to list-based search
+
+        # Fallback: search through all machines if direct API call fails
+        print(f"🔄 Falling back to list-based search for machine '{machine_name}'")
+        all_machines = self.list_discovered_machines(resource_group, project_name)
+        matching_machines = []
+
+        for machine in all_machines:
+            properties = machine.get("properties", {})
+            machine_id = machine.get("name", "")
+            
+            # Check if machine name matches (case-insensitive)
+            if machine_name.upper() == machine_id.upper():
+                # First priority: Check migrationData (migration-ready machines)
+                migration_data = properties.get("migrationData", [])
+                discovery_data = properties.get("discoveryData", [])
+                assessment_data = properties.get("assessmentData", [])
+                
+                # Add discovery status
+                machine = self._add_discovery_status(machine)
+                
+                if migration_data:
+                    print(f"✅ Found '{machine_name}' with migration data - migration-ready")
+                elif discovery_data:
+                    print(f"📋 Found '{machine_name}' with discovery data - discovered only")
+                
+                matching_machines.append(machine)
+                break
+
+        return matching_machines
+
+    def search_machines_by_name_cached(
+        self,
+        resource_group: str,
+        project_name: str,
+        machine_name: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Search for machines by name using cached data (performance optimized)
+
+        This method first ensures all machines are cached, then searches locally
+        to minimize API calls during bulk validation.
+
+        Args:
+            resource_group: Resource group name
+            project_name: Project name
+            machine_name: Machine name to search for
+
+        Returns:
+            List of matching machine dictionaries
+        """
+        # Ensure machines are cached (makes only one API call if not already cached)
+        all_machines = self.list_discovered_machines(
+            resource_group, project_name, use_cache=True)
+
+        matching_machines = []
+        machine_name_upper = machine_name.upper()
+
+        for machine in all_machines:
+            properties = machine.get("properties", {})
+            machine_id = machine.get("name", "")
+            found_match = False
+
+            # Check if machine name/ID matches (case-insensitive)
+            if machine_name_upper == machine_id.upper():
+                found_match = True
+            else:
+                # Also search within migrationData and discoveryData for machine name
+                migration_data = properties.get("migrationData", [])
+                for data in migration_data:
+                    if machine_name_upper in data.get("machineName", "").upper():
+                        found_match = True
+                        break
+                
+                if not found_match:
+                    discovery_data = properties.get("discoveryData", [])
+                    for data in discovery_data:
+                        if machine_name_upper in data.get("machineName", "").upper():
+                            found_match = True
+                            break
+
+            if found_match:
+                # Add discovery status information consistent with direct API method
+                machine = self._add_discovery_status(machine)
+                matching_machines.append(machine)
+
+        return matching_machines
 
     def get_machine_details(
         self,
@@ -415,21 +594,86 @@ class AzureMigrateApiClient(AzureRestApiClient):
         """
         Get details of a specific discovered machine
 
+        Uses migrateProjects API for basic info and assessmentProjects API for detailed info
+
         Args:
             resource_group: Resource group name
             project_name: Project name
-            machine_name: Machine name
+            machine_name: Machine name (can be display name or machine ID)
+
+        Returns:
+            Combined machine details dictionary or None
+        """
+        # First, try to find the machine by name using cached search for performance
+        matching_machines = self.search_machines_by_name_cached(
+            resource_group, project_name, machine_name)
+
+        if matching_machines:
+            # Found machine via search - return the first match with migrate API data
+            machine = matching_machines[0]
+            machine_id = machine.get("name")
+            print(f"Found machine via search: {machine_id}")
+
+            # Enrich with detailed assessment data if available
+            try:
+                # Try to get detailed info from assessment API
+                assessment_project = "p-az1-azmig025610project"  # Known assessment project
+                assessment_path = f"/subscriptions/{self.subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Migrate/assessmentProjects/{assessment_project}/machines"
+
+                # Search for matching machine in assessment project
+                assessment_machines = self.list_all(
+                    assessment_path, api_version="2023-03-15")
+                for assess_machine in assessment_machines:
+                    assess_props = assess_machine.get("properties", {})
+                    if assess_props.get("displayName", "").upper() == machine_name.upper():
+                        # Combine migrate API data with assessment details
+                        machine["assessmentDetails"] = assess_machine.get(
+                            "properties", {})
+                        print(
+                            f"Enriched with assessment details for {machine_name}")
+                        break
+            except Exception as assess_e:
+                print(f"Could not enrich with assessment details: {assess_e}")
+
+            return machine
+
+        # If search fails, try direct access by machine ID
+        migrate_path = f"/subscriptions/{self.subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Migrate/migrateProjects/{project_name}/machines/{machine_name}"
+
+        try:
+            result = self.get(migrate_path, api_version="2018-09-01-preview")
+            if result:
+                print(
+                    f"Found machine {machine_name} via direct migrateProjects API")
+                return result
+        except Exception as e:
+            print(
+                f"Direct migrateProjects API failed for machine {machine_name}: {e}")
+
+        print(f"Machine {machine_name} not found")
+        return None
+
+    def find_machine_by_display_name(
+        self,
+        resource_group: str,
+        project_name: str,
+        display_name: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Find a machine by its display name using the new search approach
+
+        Args:
+            resource_group: Resource group name
+            project_name: Project name  
+            display_name: Display name to search for (e.g., "p-dc1-qview03")
 
         Returns:
             Machine details dictionary or None
         """
-        path = f"/subscriptions/{self.subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Migrate/assessmentProjects/{project_name}/machines/{machine_name}"
+        print(f"🔍 Searching for machine with display name: '{display_name}'")
 
-        try:
-            return self.get(path, api_version="2019-10-01")
-        except Exception as e:
-            print(f"Error getting machine details: {e}")
-            return None
+        # Use the new search method that leverages both APIs
+        return self.get_machine_details(resource_group, project_name, display_name)
 
     def list_assessments(
         self,
@@ -454,7 +698,7 @@ class AzureMigrateApiClient(AzureRestApiClient):
             path = f"/subscriptions/{self.subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Migrate/assessmentProjects/{project_name}/assessments"
 
         try:
-            return self.list_all(path, api_version="2019-10-01")
+            return self.list_all(path, api_version=self.API_VERSION)
         except Exception as e:
             print(f"Error listing assessments: {e}")
             return []

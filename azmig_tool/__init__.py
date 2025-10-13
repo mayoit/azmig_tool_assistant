@@ -36,7 +36,7 @@ from .formatters import EnhancedTableFormatter
 from .clients import (
     AzureRestApiClient,
     AzureMigrateApiClient,
-    AzureValidator,
+    # AzureValidator removed - use ServersValidator from validators/ instead
     AzureMigrateIntegration
 )
 
@@ -73,7 +73,7 @@ __all__ = [
     # Clients
     "AzureRestApiClient",
     "AzureMigrateApiClient",
-    "AzureValidator",
+    # "AzureValidator" removed - use ServersValidator from validators/ instead
     "AzureMigrateIntegration",
 ]
 

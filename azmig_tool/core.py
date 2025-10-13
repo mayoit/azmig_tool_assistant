@@ -13,6 +13,8 @@ from .auth import get_azure_credential
 from .config.parsers import ConfigParser
 from .validators.landing_zone_validator import LandingZoneValidator
 from .models import MigrateProjectConfig, ValidationStatus
+from .project_manager import ProjectManager, ProjectConfig, ProjectAuthConfig, AuthMethod
+from .interactive_prompts import InteractivePrompter
 import json
 from datetime import datetime
 
@@ -29,10 +31,12 @@ def run_migration_tool(
     client_id: Optional[str] = None,
     client_secret: Optional[str] = None,
     operation: Optional[str] = None,
-    lz_file: Optional[str] = None
+    lz_file: Optional[str] = None,
+    project_name: Optional[str] = None,
+    project_folder: Optional[str] = None
 ):
     """
-    Run migration wizard with Azure API integration
+    Run migration wizard with Azure API integration and project management
 
     Args:
         excel_path: Path to Excel file with migration configurations
@@ -45,24 +49,71 @@ def run_migration_tool(
         client_secret: Azure client secret (for service principal)
         operation: Operation type (lz_validation, server_validation, replication, full_wizard)
         lz_file: Path to Landing Zone CSV/JSON file
+        project_name: Project name (for new projects or selecting existing)
+        project_folder: Project folder path (optional - defaults to migration_projects/)
     """
     console.rule("[bold green]Azure Integration[/bold green]")
 
-    # Authenticate to Azure
-    console.print("\n[bold cyan]🔐 Azure Authentication[/bold cyan]\n")
-
-    try:
-        credential = get_azure_credential(
-            auth_method=auth_method,
-            tenant_id=tenant_id,
-            client_id=client_id,
-            client_secret=client_secret
-        )
-    except Exception as e:
-        console.print(f"[red]✗ Authentication failed: {e}[/red]")
-        console.print(
-            "[yellow]Please check your credentials and try again[/yellow]")
+    # If no operation specified, go directly to wizard's project-first workflow
+    if not operation:
+        wizard = MigrationWizard()  # Let wizard handle its own project management
+        wizard.run(excel_path=excel_path, export_json=export_json)
         return
+
+    # Initialize project management for specific operations
+    project_manager = ProjectManager(workspace_root=Path(
+        project_folder) if project_folder else None)
+    project = None
+    credential = None
+
+    # If project name is specified, try to find existing project
+    if project_name:
+        project = project_manager.get_project_by_name(project_name)
+        if project:
+            console.print(
+                f"\n[green]✓[/green] Found existing project: {project.project_name}")
+            console.print(
+                f"[dim]→ Using saved authentication: {project.auth_config.auth_method.value}[/dim]\n")
+
+            # Use saved authentication from project with token caching
+            try:
+                from .cached_credential import CachedCredentialFactory
+                credential = CachedCredentialFactory.create_credential(
+                    project.auth_config,
+                    project_manager,
+                    project
+                )
+            except Exception as e:
+                console.print(
+                    f"[red]✗ Authentication failed using saved config: {e}[/red]")
+                console.print(
+                    "[yellow]Please check your credentials and try again[/yellow]")
+                return
+        else:
+            console.print(
+                f"[yellow]⚠[/yellow] Project '{project_name}' not found. Creating new project...")
+
+    # If no project or project not found, handle authentication
+    if not project:
+        console.print("\n[bold cyan]🔐 Azure Authentication[/bold cyan]\n")
+
+        try:
+            # For new project creation, we'll use regular authentication
+            # Token caching will be handled by the wizard when it creates the project
+            credential = get_azure_credential(
+                auth_method=auth_method,
+                tenant_id=tenant_id,
+                client_id=client_id,
+                client_secret=client_secret
+            )
+        except Exception as e:
+            console.print(f"[red]✗ Authentication failed: {e}[/red]")
+            console.print(
+                "[yellow]Please check your credentials and try again[/yellow]")
+            return
+    else:
+        # credential was already set above when using saved project auth
+        pass
 
     # Load validation configuration (optional)
     config = None
@@ -95,8 +146,13 @@ def run_migration_tool(
             console.print(
                 "[yellow]Continuing with default validation settings[/yellow]\n")
 
-    # Run wizard based on operation type
-    wizard = MigrationWizard(credential=credential)
+    # Ensure we have credential and project at this point
+    if 'credential' not in locals():
+        console.print("[red]Error:[/red] Authentication failed")
+        return
+
+    # For specific operations, use existing project management
+    wizard = MigrationWizard(credential=credential, project=project)
 
     # Handle different operation types
     if operation == 'lz_validation':
@@ -117,7 +173,7 @@ def run_migration_tool(
         console.print("\n[bold]Enabling Replication[/bold]\n")
         wizard.run(excel_path=excel_path, export_json=export_json)
     else:
-        # Default: full wizard
+        # Default: Use project-first workflow
         wizard.run(excel_path=excel_path, export_json=export_json)
 
 

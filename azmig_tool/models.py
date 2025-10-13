@@ -39,6 +39,12 @@ class ValidationStage(str, Enum):
     RBAC_TARGET_RG = "rbac_target_rg"
     RBAC_RECOVERY_VAULT = "rbac_recovery_vault"
     LANDING_ZONE_DEPENDENCY = "landing_zone_dependency"
+    # Intelligent validation stages
+    PROJECT_MATCHING = "project_matching"
+    MACHINE_DISCOVERY = "machine_discovery"
+    CACHE_STORAGE = "cache_storage"
+    RECOVERY_VAULT = "recovery_vault"
+    CONFIGURATION_VALIDATION = "configuration_validation"
 
 
 # ============================================================================
@@ -75,7 +81,7 @@ class ValidationStatus(str, Enum):
 @dataclass
 class MigrationConfig:
     """Configuration for a single machine migration"""
-    target_machine_name: str
+    machine_name: str  # Single machine name (same for source and target)
     target_region: str
     target_subscription: str
     target_rg: str
@@ -83,21 +89,12 @@ class MigrationConfig:
     target_subnet: str
     target_machine_sku: str
     target_disk_type: str
+    migrate_project_name: str  # Required for intelligent matching with landing zone configs
 
-    # Optional fields
-    source_machine_name: Optional[str] = None
-    recovery_vault_name: Optional[str] = None
+    # Note: Recovery vault info is retrieved from migrate project during LZ validation
 
     def __post_init__(self):
         """Validate basic field formats"""
-        # Validate machine name (Azure naming rules)
-        import re
-        if not re.match(r'^[a-zA-Z0-9-]{1,64}$', self.target_machine_name):
-            raise ValueError(
-                f"Invalid target_machine_name: {self.target_machine_name}. "
-                "Must match ^[a-zA-Z0-9-]{{1,64}}$"
-            )
-
         # Validate disk type
         if self.target_disk_type not in [dt.value for dt in DiskType]:
             raise ValueError(
@@ -119,7 +116,7 @@ class ConsolidatedMigrationConfig:
     migrate_resource_group: str
 
     # Server migration fields (from MigrationConfig)
-    target_machine_name: str
+    machine_name: str  # Single machine name (same for source and target)
     target_region: str
     target_subscription: str
     target_rg: str
@@ -128,22 +125,12 @@ class ConsolidatedMigrationConfig:
     target_machine_sku: str
     target_disk_type: str
 
-    # Optional fields for both
-    source_machine_name: Optional[str] = None
-    recovery_vault_name: Optional[str] = None
+    # Note: Recovery vault info is retrieved from migrate project during LZ validation
 
     def __post_init__(self):
         """Validate basic field formats"""
         # Normalize region
         self.target_region = self.target_region.lower().strip()
-        
-        # Validate machine name (Azure naming rules)
-        import re
-        if not re.match(r'^[a-zA-Z0-9-]{1,64}$', self.target_machine_name):
-            raise ValueError(
-                f"Invalid target_machine_name: {self.target_machine_name}. "
-                "Must match ^[a-zA-Z0-9-]{{1,64}}$"
-            )
 
         # Validate disk type
         if self.target_disk_type not in [dt.value for dt in DiskType]:
@@ -177,14 +164,13 @@ class ConsolidatedMigrationConfig:
             cache_storage_account=self.cache_storage_account,
             cache_storage_resource_group=self.cache_storage_resource_group,
             migrate_project_subscription=self.migrate_project_subscription,
-            migrate_resource_group=self.migrate_resource_group,
-            recovery_vault_name=self.recovery_vault_name
+            migrate_resource_group=self.migrate_resource_group
         )
 
     def to_migration_config(self) -> 'MigrationConfig':
         """Extract Server migration configuration"""
         return MigrationConfig(
-            target_machine_name=self.target_machine_name,
+            machine_name=self.machine_name,
             target_region=self.target_region,
             target_subscription=self.target_subscription,
             target_rg=self.target_rg,
@@ -192,8 +178,7 @@ class ConsolidatedMigrationConfig:
             target_subnet=self.target_subnet,
             target_machine_sku=self.target_machine_sku,
             target_disk_type=self.target_disk_type,
-            source_machine_name=self.source_machine_name,
-            recovery_vault_name=self.recovery_vault_name
+            migrate_project_name=self.migrate_project_name
         )
 
 
@@ -207,11 +192,31 @@ class ValidationResult:
 
 
 @dataclass
+class MachineDiscoveryInfo:
+    """Information about machine discovery status in Azure Migrate"""
+    machine_name: str
+    discovered: bool
+    ip_address: Optional[str] = None
+    datacenter_location: Optional[str] = None
+    os_type: Optional[str] = None
+    cpu_cores: Optional[int] = None
+    memory_mb: Optional[int] = None
+    disk_count: Optional[int] = None
+    last_seen: Optional[str] = None
+    discovery_source: Optional[str] = None  # appliance name
+
+
+@dataclass
 class MachineValidationReport:
     """Validation report for a single machine"""
     config: MigrationConfig
     validations: List[ValidationResult]
     overall_status: str  # "PASSED", "FAILED", "WARNING"
+    # Intelligent validation fields
+    discovery_info: Optional[MachineDiscoveryInfo] = None
+    matched_project: Optional[str] = None  # Project name that was matched
+    cache_storage: Optional[str] = None  # Cache storage account name
+    recovery_vault: Optional[str] = None  # Recovery vault name
 
     def is_valid(self) -> bool:
         """Check if all validations passed"""
@@ -257,9 +262,10 @@ class MigrateProjectConfig:
     migrate_project_subscription: str  # Subscription where Migrate project resides
     migrate_resource_group: str
     cache_storage_resource_group: str  # Resource group for cache storage account
-
-    # Optional fields
+    # Auto-discovered from migrate project, but accepting from CSV for compatibility
     recovery_vault_name: Optional[str] = None
+
+    # Optional fields - recovery vault will be auto-discovered from migrate project
 
     def __post_init__(self):
         """Validate and normalize data"""

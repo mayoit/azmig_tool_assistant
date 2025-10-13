@@ -4,7 +4,7 @@ Landing Zone Validator - Azure API validation for project readiness
 This validator performs Azure API calls to validate Azure Migrate project setup.
 """
 from typing import Optional, Dict, Any, List
-from azure.identity import DefaultAzureCredential
+from azure.core.credentials import TokenCredential
 from azure.mgmt.resource import ResourceManagementClient
 from azure.mgmt.storage import StorageManagementClient
 from azure.mgmt.authorization import AuthorizationManagementClient
@@ -42,25 +42,29 @@ class LandingZoneValidator(BaseLandingZoneInterface):
     - vCPU quota checking across VM families
 
     Usage:
-        credential = DefaultAzureCredential()
+        from azmig_tool.cached_credential import CachedCredentialFactory
+        credential = CachedCredentialFactory.create_credential(project_auth, project_manager, project)
         validator = LandingZoneValidator(credential)
         result = validator.validate_project(config)
     """
 
     def __init__(
         self,
-        credential: Optional[DefaultAzureCredential] = None,
+        credential: Optional[TokenCredential] = None,
         validation_config: Optional[ValidationConfig] = None
     ):
         """
         Initialize validator
 
         Args:
-            credential: Azure credential (uses DefaultAzureCredential if not provided)
+            credential: Azure credential (required - use CachedCredentialFactory for token management)
             validation_config: Validation configuration (loads default if not provided)
         """
         super().__init__(validation_config)
-        self.credential = credential or DefaultAzureCredential()
+        if credential is None:
+            raise ValueError(
+                "Credential is required. Use CachedCredentialFactory.create_credential() to get cached credentials.")
+        self.credential = credential
         self._clients_cache: Dict[str, Any] = {}
 
     # ========== Client Management ==========
@@ -163,14 +167,13 @@ class LandingZoneValidator(BaseLandingZoneInterface):
         )
 
     def _get_vault_scope(self, config: MigrateProjectConfig) -> Optional[str]:
-        """Build resource scope for Recovery Services Vault"""
-        if not config.recovery_vault_name:
-            return None
-        return (
-            f"/subscriptions/{config.migrate_project_subscription}"
-            f"/resourceGroups/{config.migrate_resource_group}"
-            f"/providers/Microsoft.RecoveryServices/vaults/{config.recovery_vault_name}"
-        )
+        """Build resource scope for Recovery Services Vault
+
+        TODO: Auto-discover recovery vault from migrate project instead of manual specification
+        For now, recovery vault validation is optional (will be auto-discovered in future versions)
+        """
+        # Recovery vault validation is currently disabled as vault will be auto-discovered
+        return None
 
     # ========== Validation Methods ==========
 
@@ -267,7 +270,7 @@ class LandingZoneValidator(BaseLandingZoneInterface):
             elif not has_migrate:
                 message = f"Missing Contributor access to Migrate project '{config.migrate_project_name}'"
             elif not has_vault:
-                message = f"Missing Contributor access to Recovery Vault '{config.recovery_vault_name}'"
+                message = "Missing Contributor access to Recovery Vault (will be auto-discovered)"
             elif not has_reader:
                 message = f"Missing Reader access to subscription '{config.subscription_id}'"
             else:

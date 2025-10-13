@@ -37,6 +37,18 @@ def main():
         help="Azure client secret (optional for service principal)"
     )
 
+    # Project management options
+    parser.add_argument(
+        "--project-name",
+        type=str,
+        help="Project name (for new projects or selecting existing)"
+    )
+    parser.add_argument(
+        "--project-folder",
+        type=str,
+        help="Project folder path (optional - defaults to migration_projects/)"
+    )
+
     # Operation options (optional - will prompt if not provided)
     parser.add_argument(
         "--operation",
@@ -63,24 +75,6 @@ def main():
         help="Export results to JSON file (optional)"
     )
     parser.add_argument(
-        "--validation-config",
-        type=str,
-        help="Path to validation configuration YAML file (optional - will prompt)"
-    )
-    parser.add_argument(
-        "--validation-profile",
-        type=str,
-        choices=["default", "full", "quick", "rbac_only", "resource_only"],
-        help="Use a predefined validation profile (optional - will prompt)"
-    )
-
-    # Utility options
-    parser.add_argument(
-        "--create-default-config",
-        action="store_true",
-        help="Create a default validation_config.yaml file and exit"
-    )
-    parser.add_argument(
         "--non-interactive",
         action="store_true",
         help="Disable interactive prompts (all parameters must be provided via CLI)"
@@ -88,39 +82,32 @@ def main():
 
     args = parser.parse_args()
 
-    # Handle config file creation
-    if args.create_default_config:
-        from .config.validation_config import ValidationConfigLoader
-        try:
-            config_path = ValidationConfigLoader.create_default_config()
-            console.print(
-                f"[green]SUCCESS[/green] Created default validation config: {config_path}")
-        except FileExistsError as e:
-            console.print(f"[yellow]WARNING[/yellow] {e}")
-        return
-
     # Always run with Azure integration
     console.print("\n[bold cyan]🛠️  Azure Bulk Migration Tool[/bold cyan]")
     console.print("[dim]Azure Integration[/dim]\n")
 
     # Gather parameters from CLI args
     provided_params = {
+        'auth_method': args.auth_method,
+        'tenant_id': args.tenant_id,
+        'client_id': args.client_id,
+        'client_secret': args.client_secret,
         'operation': args.operation,
         'excel': args.excel,
         'lz_file': args.lz_file,
         'export_json': args.export_json,
-        'validation_config': args.validation_config,
-        'validation_profile': args.validation_profile,
-        'auth_method': args.auth_method,
-        'tenant_id': args.tenant_id,
-        'client_id': args.client_id,
-        'client_secret': args.client_secret
+        'project_name': args.project_name,
+        'project_folder': args.project_folder
     }
 
     # Use interactive prompts if not in non-interactive mode
     if not args.non_interactive:
-        from .interactive_prompts import get_interactive_inputs
-        params = get_interactive_inputs("azure", provided_params)
+        # If no operation provided, go directly to wizard's project-first workflow
+        if not args.operation:
+            params = provided_params  # Skip operation prompt, let wizard handle project selection
+        else:
+            from .interactive_prompts import get_interactive_inputs
+            params = get_interactive_inputs("azure", provided_params)
     else:
         # Non-interactive mode - require all necessary parameters
         params = provided_params
@@ -152,7 +139,9 @@ def main():
         client_id=params.get('client_id'),
         client_secret=params.get('client_secret'),
         operation=params.get('operation'),
-        lz_file=params.get('lz_file')
+        lz_file=params.get('lz_file'),
+        project_name=params.get('project_name'),
+        project_folder=params.get('project_folder')
     )
 
 

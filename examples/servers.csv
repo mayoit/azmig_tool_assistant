@@ -1,4 +1,0 @@
-target_machine_name,target_region,target_subscription,target_rg,target_vnet,target_subnet,target_machine_sku,target_disk_type
-webapp-vm-01,eastus,12345678-1234-1234-1234-123456789012,migration-rg,migration-vnet,default,Standard_D4s_v3,Premium_LRS
-db-server-01,westeurope,87654321-4321-4321-4321-210987654321,migration-rg-eu,migration-vnet-eu,default,Standard_E4s_v3,StandardSSD_LRS
-app-server-01,eastus,12345678-1234-1234-1234-123456789012,migration-rg,migration-vnet,app-subnet,Standard_D8s_v3,Premium_LRS

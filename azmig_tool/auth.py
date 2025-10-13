@@ -10,6 +10,7 @@ Provides multiple authentication methods similar to Azure CLI:
 """
 
 import os
+import requests
 from typing import Optional, Union
 from rich.console import Console
 from rich.prompt import Prompt, Confirm
@@ -354,6 +355,10 @@ class AzureAuthenticator:
         Raises:
             ClientAuthenticationError: If credential validation fails
         """
+        if not self.credential:
+            raise ClientAuthenticationError(
+                "No credential available for validation")
+
         try:
             # Try to get a token for Azure Resource Manager
             token = self.credential.get_token(
@@ -409,3 +414,104 @@ def get_azure_credential(
 
     authenticator = AzureAuthenticator(auth_method=auth_method)
     return authenticator.authenticate()
+
+
+def get_current_user_object_id(credential: TokenCredential) -> Optional[str]:
+    """
+    Get the current user's Azure AD Object ID from the authenticated credential
+
+    Args:
+        credential: Azure token credential
+
+    Returns:
+        str: Azure AD Object ID of the current user, or None if not available
+    """
+    try:
+        # Get access token for Microsoft Graph API
+        token = credential.get_token("https://graph.microsoft.com/.default")
+
+        # Call Microsoft Graph API to get current user info
+        headers = {
+            'Authorization': f'Bearer {token.token}',
+            'Content-Type': 'application/json'
+        }
+
+        response = requests.get(
+            'https://graph.microsoft.com/v1.0/me',
+            headers=headers,
+            timeout=10
+        )
+
+        if response.status_code == 200:
+            user_info = response.json()
+            object_id = user_info.get('id')
+
+            if object_id:
+                console.print(
+                    f"[green]✓[/green] Detected current user: {user_info.get('userPrincipalName', 'Unknown')} (Object ID: {object_id})")
+                return object_id
+            else:
+                console.print(
+                    "[yellow]⚠[/yellow] Could not extract Object ID from user info")
+                return None
+        else:
+            console.print(
+                f"[yellow]⚠[/yellow] Could not retrieve user info from Microsoft Graph (HTTP {response.status_code})")
+            return None
+
+    except Exception as e:
+        console.print(
+            f"[yellow]⚠[/yellow] Could not auto-detect user Object ID: {str(e)}")
+        return None
+
+
+def get_current_tenant_id(credential: TokenCredential) -> Optional[str]:
+    """
+    Get the current tenant ID from the authenticated credential
+
+    Args:
+        credential: Azure token credential
+
+    Returns:
+        str: Tenant ID, or None if unable to retrieve
+
+    Raises:
+        Exception: If unable to get tenant information
+    """
+    try:
+        # Get access token for Microsoft Graph
+        token = credential.get_token('https://graph.microsoft.com/.default')
+
+        headers = {
+            'Authorization': f'Bearer {token.token}',
+            'Content-Type': 'application/json'
+        }
+
+        # Get organization information to extract tenant ID
+        response = requests.get(
+            'https://graph.microsoft.com/v1.0/organization',
+            headers=headers,
+            timeout=10
+        )
+
+        if response.status_code == 200:
+            org_info = response.json()
+            if org_info.get('value') and len(org_info['value']) > 0:
+                tenant_id = org_info['value'][0].get('id')
+                if tenant_id:
+                    console.print(
+                        f"[green]✓[/green] Detected tenant ID: {tenant_id}")
+                    return tenant_id
+
+            console.print(
+                "[yellow]⚠[/yellow] Could not extract tenant ID from organization info")
+            return None
+        else:
+            console.print(
+                f"[yellow]⚠[/yellow] Could not retrieve organization info from Microsoft Graph (HTTP {response.status_code})")
+            return None
+
+    except Exception as e:
+        console.print(
+            f"[yellow]⚠[/yellow] Could not auto-detect tenant ID: {str(e)}")
+        return None

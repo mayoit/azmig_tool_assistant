@@ -826,8 +826,7 @@ class MigrationConfig:
     target_machine_name: str
     
     def __post_init__(self):
-        if not re.match(r'^[a-zA-Z0-9-]{1,64}$', self.target_machine_name):
-            raise ValueError(f"Invalid machine name: {self.target_machine_name}")
+        # Basic configuration validation (machine name validation removed)
 ```
 
 **5. Azure API Error Handling**

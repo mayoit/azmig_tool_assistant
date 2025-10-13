@@ -2,7 +2,7 @@
 Azure Migrate integration for discovery and replication enablement
 """
 from typing import List, Optional, Dict
-from azure.identity import DefaultAzureCredential
+from azure.core.credentials import TokenCredential
 from azure.core.exceptions import HttpResponseError, ResourceNotFoundError
 from rich.console import Console
 from ..models import (
@@ -21,8 +21,11 @@ console = Console()
 class AzureMigrateIntegration:
     """Integration with Azure Migrate for discovery and replication"""
 
-    def __init__(self, credential: Optional[DefaultAzureCredential] = None):
-        self.credential = credential or DefaultAzureCredential()
+    def __init__(self, credential: Optional[TokenCredential] = None):
+        if credential is None:
+            raise ValueError(
+                "Credential is required. Use CachedCredentialFactory.create_credential() to get cached credentials.")
+        self.credential = credential
         self._clients_cache: Dict[str, AzureMigrateApiClient] = {}
 
     def _get_migrate_client(self, subscription_id: str) -> AzureMigrateApiClient:
@@ -102,18 +105,104 @@ class AzureMigrateIntegration:
             )
 
             for machine in discovered_machines:
+                
                 properties = machine.get('properties', {})
-
-                machines.append({
-                    "name": machine.get('name', ''),
-                    "display_name": properties.get('displayName', machine.get('name', '')),
-                    "boot_type": properties.get('bootType'),
-                    "operating_system": properties.get('operatingSystemType') or properties.get('operatingSystemName'),
-                    "cores": properties.get('numberOfCores') or properties.get('cores'),
-                    "memory_mb": properties.get('megabytesOfMemory') or properties.get('memoryInMB'),
-                    "disks": properties.get('disks', []),
-                    "id": machine.get('id', '')
-                })
+                
+                # Extract data from discoveryData, assessmentData, and migrationData
+                discovery_data = properties.get('discoveryData', [])
+                assessment_data = properties.get('assessmentData', [])
+                migration_data = properties.get('migrationData', [])
+                
+                # Get machine details - prioritize migrationData, but always get IP from discoveryData
+                machine_name = machine.get('name', '')
+                display_name = machine_name
+                os_info = None
+                boot_type = None
+                cores = None
+                memory_mb = None
+                disks = []
+                ip_addresses = []
+                fqdn = None
+                
+                # First priority: Extract from migrationData if available (migration-ready machines)
+                if migration_data and len(migration_data) > 0:
+                    latest_migration = migration_data[0]  # Use first item in migrationData
+                    display_name = latest_migration.get('machineName', machine_name)
+                    os_info = latest_migration.get('osName') or latest_migration.get('osType')
+                    fqdn = latest_migration.get('fqdn')
+                    ip_addresses = latest_migration.get('ipAddresses', [])
+                    
+                    # Extract boot type from extendedInfo if available
+                    extended_info = latest_migration.get('extendedInfo', {})
+                    boot_type = extended_info.get('bootType')
+                    
+                    # For migration data, we might not have detailed specs, so keep minimal info
+                    # Migration data focuses on replication status rather than machine specs
+                
+                # Always check discoveryData for additional info (especially IP addresses and detailed specs)
+                if discovery_data and len(discovery_data) > 0:
+                    latest_discovery = discovery_data[0]  # Use first item in discoveryData
+                    
+                    # If we didn't get info from migrationData, use discoveryData as primary source
+                    if not migration_data:
+                        display_name = latest_discovery.get('machineName', machine_name)
+                        os_info = latest_discovery.get('osName') or latest_discovery.get('osType')
+                        fqdn = latest_discovery.get('fqdn')
+                    
+                    # Always get IP addresses from discoveryData (more reliable source)
+                    discovery_ips = latest_discovery.get('ipAddresses', [])
+                    if discovery_ips:
+                        ip_addresses = discovery_ips
+                    
+                    # Get FQDN from discovery if not already set
+                    if not fqdn:
+                        fqdn = latest_discovery.get('fqdn')
+                    
+                    # Extract boot type from extendedInfo
+                    extended_info = latest_discovery.get('extendedInfo', {})
+                    if not boot_type:
+                        boot_type = extended_info.get('bootType')
+                    
+                    # Extract memory and cores from memory details (only from discoveryData)
+                    memory_details = extended_info.get('memoryDetails')
+                    if memory_details:
+                        try:
+                            import json
+                            memory_info = json.loads(memory_details)
+                            memory_mb = memory_info.get('AllocatedMemoryInMB')
+                            cores = memory_info.get('NumberOfProcessorCore')
+                        except:
+                            pass
+                    
+                    # Extract disk information (only from discoveryData)
+                    disk_details = extended_info.get('diskDetails') or extended_info.get('disks')
+                    if disk_details:
+                        try:
+                            import json
+                            disks = json.loads(disk_details) if isinstance(disk_details, str) else disk_details
+                        except:
+                            disks = []
+                
+                # Add discovery status information
+                machine_info = {
+                    "name": machine_name,
+                    "display_name": display_name,
+                    "boot_type": boot_type,
+                    "operating_system": os_info,
+                    "cores": cores,
+                    "memory_mb": memory_mb,
+                    "disks": disks,
+                    "ip_addresses": ip_addresses,  # IP addresses from discoveryData
+                    "fqdn": fqdn,  # FQDN from discoveryData or migrationData
+                    "id": machine.get('id', ''),
+                    "discovery_records": len(discovery_data),
+                    "assessment_records": len(assessment_data),
+                    "migration_records": len(migration_data),
+                    "migration_ready": len(migration_data) > 0,
+                    "raw_properties": properties  # Keep full properties for debugging
+                }
+                
+                machines.append(machine_info)
 
             return machines
 
@@ -122,71 +211,7 @@ class AzureMigrateIntegration:
                 f"[yellow]⚠ Error getting discovered machines: {str(e)}[/yellow]")
             return []
 
-    def validate_machine_discovered(
-        self,
-        config: MigrationConfig,
-        project: AzureMigrateProject
-    ) -> ValidationResult:
-        """
-        Validate that source machine is discovered in Azure Migrate project
 
-        Args:
-            config: MigrationConfig object
-            project: AzureMigrateProject to search in
-
-        Returns:
-            ValidationResult
-        """
-        try:
-            discovered_machines = self.get_discovered_machines(project)
-
-            # Use source_machine_name if provided, otherwise use target_machine_name
-            search_name = config.source_machine_name or config.target_machine_name
-
-            # Search for machine in discovered list
-            found_machine = None
-            for machine in discovered_machines:
-                if (machine['name'].lower() == search_name.lower() or
-                        machine.get('display_name', '').lower() == search_name.lower()):
-                    found_machine = machine
-                    break
-
-            if found_machine:
-                return ValidationResult(
-                    stage=ValidationStage.MIGRATE_DISCOVERY,
-                    passed=True,
-                    message=f"Machine '{search_name}' found in Azure Migrate project '{project.name}'",
-                    details={
-                        "machine_name": search_name,
-                        "project": project.name,
-                        "machine_id": found_machine['id'],
-                        "os": found_machine.get('operating_system'),
-                        "cores": found_machine.get('cores'),
-                        "memory_mb": found_machine.get('memory_mb')
-                    }
-                )
-            else:
-                available_machines = [m['name']
-                                      for m in discovered_machines[:10]]
-                return ValidationResult(
-                    stage=ValidationStage.MIGRATE_DISCOVERY,
-                    passed=False,
-                    message=f"Machine '{search_name}' not found in Azure Migrate project '{project.name}'",
-                    details={
-                        "machine_name": search_name,
-                        "project": project.name,
-                        "discovered_count": len(discovered_machines),
-                        "sample_machines": available_machines
-                    }
-                )
-
-        except Exception as e:
-            return ValidationResult(
-                stage=ValidationStage.MIGRATE_DISCOVERY,
-                passed=False,
-                message=f"Error validating machine discovery: {str(e)}",
-                details={"error": str(e)}
-            )
 
     def enable_replication(
         self,
@@ -211,11 +236,11 @@ class AzureMigrateIntegration:
             # which require additional SDK packages
 
             console.print(
-                f"[yellow]⚠ Replication enablement is not yet implemented for '{config.target_machine_name}'[/yellow]"
+                f"[yellow]⚠ Replication enablement is not yet implemented for '{config.machine_name}'[/yellow]"
             )
 
             return {
-                "machine_name": config.target_machine_name,
+                "machine_name": config.machine_name,
                 "status": "pending",
                 "message": "Replication API integration pending",
                 "project": project.name,
@@ -225,7 +250,7 @@ class AzureMigrateIntegration:
         except Exception as e:
             console.print(f"[red]Error enabling replication: {str(e)}[/red]")
             return {
-                "machine_name": config.target_machine_name,
+                "machine_name": config.machine_name,
                 "status": "failed",
                 "error": str(e)
             }
@@ -234,8 +259,11 @@ class AzureMigrateIntegration:
 class RecoveryServicesIntegration:
     """Integration with Azure Site Recovery for replication"""
 
-    def __init__(self, credential: Optional[DefaultAzureCredential] = None):
-        self.credential = credential or DefaultAzureCredential()
+    def __init__(self, credential: Optional[TokenCredential] = None):
+        if credential is None:
+            raise ValueError(
+                "Credential is required. Use CachedCredentialFactory.create_credential() to get cached credentials.")
+        self.credential = credential
 
     def validate_recovery_vault_rbac(
         self,
@@ -269,7 +297,7 @@ class RecoveryServicesIntegration:
             auth_client = AuthorizationManagementClient(
                 self.credential, subscription_id)
             role_assignments = auth_client.role_assignments.list_for_scope(
-                scope=vault.id,
+                scope=vault.id, # pyright: ignore[reportArgumentType]
                 filter=f"principalId eq '{user_object_id}'"
             )
 
@@ -278,7 +306,7 @@ class RecoveryServicesIntegration:
 
             has_access = False
             for assignment in role_assignments:
-                role_id = assignment.role_definition_id.split('/')[-1]
+                role_id = assignment.role_definition_id.split('/')[-1] # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]
                 if role_id in [contributor_role_id, owner_role_id]:
                     has_access = True
                     break

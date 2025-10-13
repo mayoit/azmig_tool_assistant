@@ -2,7 +2,7 @@
 Servers Validator - Azure API validation
 """
 from typing import Optional, Dict, Any
-from azure.identity import DefaultAzureCredential
+from azure.core.credentials import TokenCredential
 from azure.mgmt.resource import ResourceManagementClient
 from azure.mgmt.compute import ComputeManagementClient
 from azure.core.exceptions import HttpResponseError, ResourceNotFoundError
@@ -21,16 +21,19 @@ from ..config.validation_config import ValidationConfig
 class ServersValidator(BaseValidatorInterface):
     """Validator using Azure APIs"""
 
-    def __init__(self, credential: Optional[DefaultAzureCredential] = None, validation_config: Optional[ValidationConfig] = None):
+    def __init__(self, credential: Optional[TokenCredential] = None, validation_config: Optional[ValidationConfig] = None):
         """
         Initialize validator
 
         Args:
-            credential: Azure credential (uses DefaultAzureCredential if not provided)
+            credential: Azure credential (required - use CachedCredentialFactory for token management)
             validation_config: Validation configuration (loads default if not provided)
         """
         super().__init__(validation_config)
-        self.credential = credential or DefaultAzureCredential()
+        if credential is None:
+            raise ValueError(
+                "Credential is required. Use CachedCredentialFactory.create_credential() to get cached credentials.")
+        self.credential = credential
         self._clients_cache: Dict[str, Any] = {}
 
     def _get_resource_client(self, subscription_id: str) -> ResourceManagementClient:
@@ -504,40 +507,97 @@ class ServersValidator(BaseValidatorInterface):
         config: MigrationConfig,
         project: AzureMigrateProject
     ) -> ValidationResult:
-        """Validate that source machine is discovered in Azure Migrate project"""
+        """Validate that source machine is migration-ready in Azure Migrate project
+
+        This validation checks for machines that have migrationData populated,
+        which indicates the machine is prepared for migration (not just discovered).
+        """
         try:
             from ..clients.azure_client import AzureMigrateApiClient
 
             client = AzureMigrateApiClient(
                 self.credential, project.subscription_id)
-            search_name = config.source_machine_name or config.target_machine_name
+            search_name = config.machine_name
 
-            # Get discovered machines from the project using REST API
-            discovered_machines = client.list_discovered_machines(
+            # Use the cached search method for better performance (minimizes API calls)
+            machine_details = client.search_machines_by_name_cached(
                 project.resource_group,
-                project.name
+                project.name,
+                search_name
             )
 
-            # Search for machine
-            for machine in discovered_machines:
+            # Check if machine was found
+            if machine_details:
+                machine = machine_details[0]  # Get first match
                 properties = machine.get('properties', {})
-                machine_name = machine.get('name', '')
-                display_name = properties.get('displayName', machine_name)
 
-                if (machine_name.lower() == search_name.lower() or
-                        display_name.lower() == search_name.lower()):
+                # Check for migrationData - this is what indicates migration readiness
+                migration_data = properties.get('migrationData', [])
+                discovery_data = properties.get('discoveryData', [])
+                assessment_data = properties.get('assessmentData', [])
+
+                # Machine must have migrationData to be considered migration-ready
+                if migration_data and len(migration_data) > 0:
+                    # Extract migration info from migrationData
+                    migration_record = migration_data[0]
+                    migration_info = {
+                        "machine_name": migration_record.get('machineName', search_name),
+                        "machine_id": migration_record.get('machineId', ''),
+                        "fqdn": migration_record.get('fqdn', ''),
+                        "ip_addresses": migration_record.get('ipAddresses', []),
+                        "mac_addresses": migration_record.get('macAddresses', []),
+                        "fabric_type": migration_record.get('fabricType', ''),
+                        "migration_phase": migration_record.get('migrationPhase', ''),
+                        "migration_tested": migration_record.get('migrationTested', False),
+                        "replication_progress": migration_record.get('replicationProgressPercentage', 0),
+                        "target_vm_arm_id": migration_record.get('targetVMArmId', ''),
+                        "solution_name": migration_record.get('solutionName', ''),
+                        "last_updated": migration_record.get('lastUpdatedTime', ''),
+                        "enqueue_time": migration_record.get('enqueueTime', '')
+                    }
+
                     return ValidationResult(
                         stage=ValidationStage.MIGRATE_DISCOVERY,
                         passed=True,
-                        message=f"✓ Machine '{search_name}' found in Azure Migrate project '{project.name}'",
+                        message=f"✓ Machine '{search_name}' is migration-ready in Azure Migrate project '{project.name}' (Phase: {migration_info.get('migration_phase', 'Unknown')})",
                         details={
                             "machine_name": search_name,
                             "project": project.name,
                             "machine_id": machine.get('id', ''),
-                            "os": properties.get('operatingSystemType') or properties.get('operatingSystemName'),
-                            "cores": properties.get('numberOfCores') or properties.get('cores'),
-                            "memory_mb": properties.get('megabytesOfMemory') or properties.get('memoryInMB'),
+                            "migration_info": migration_info,
+                            "migration_records": len(migration_data),
+                            "discovery_records": len(discovery_data),
+                            "assessment_records": len(assessment_data),
+                            "migration_ready": True
+                        }
+                    )
+                else:
+                    # Machine found but not migration-ready (no migrationData)
+                    # Provide helpful info about what data is available
+                    available_data = []
+                    if discovery_data:
+                        available_data.append(
+                            f"discovery ({len(discovery_data)} records)")
+                    if assessment_data:
+                        available_data.append(
+                            f"assessment ({len(assessment_data)} records)")
 
+                    available_info = ", ".join(
+                        available_data) if available_data else "none"
+
+                    return ValidationResult(
+                        stage=ValidationStage.MIGRATE_DISCOVERY,
+                        passed=False,
+                        message=f"✗ Machine '{search_name}' found but not migration-ready in project '{project.name}'. Available data: {available_info}",
+                        details={
+                            "machine_name": search_name,
+                            "project": project.name,
+                            "machine_id": machine.get('id', ''),
+                            "migration_records": len(migration_data),
+                            "discovery_records": len(discovery_data),
+                            "assessment_records": len(assessment_data),
+                            "migration_ready": False,
+                            "reason": "Machine requires migration preparation - no migrationData available"
                         }
                     )
 

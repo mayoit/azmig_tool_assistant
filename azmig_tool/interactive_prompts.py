@@ -5,11 +5,15 @@ Provides scenario-based wizards for user-friendly operation.
 """
 import os
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 from rich.console import Console
 from rich.prompt import Prompt, Confirm
 from rich.table import Table
 from rich.panel import Panel
+from datetime import datetime
+
+from .template_manager import TemplateManager
+from .project_manager import ProjectManager, ProjectConfig, ProjectAuthConfig, AuthMethod, ProjectStatus
 
 console = Console()
 
@@ -19,6 +23,227 @@ class InteractivePrompter:
 
     def __init__(self):
         self.console = Console()
+        self.template_manager = TemplateManager(self.console)
+        self.project_manager = ProjectManager()
+
+    def prompt_migration_type(self) -> Tuple[str, Optional[ProjectConfig]]:
+        """
+        Prompt user to select migration type (New vs Patch Existing).
+        This is the first prompt when starting the tool.
+
+        Returns:
+            Tuple[str, Optional[ProjectConfig]]: Migration type and project config (if existing)
+        """
+        self.console.print("\n[bold cyan]Step 1: Migration Type[/bold cyan]\n")
+
+        table = Table(show_header=False, box=None, padding=(0, 2))
+        table.add_column("Number", style="cyan")
+        table.add_column("Type", style="white")
+        table.add_column("Description", style="dim")
+
+        table.add_row("1", "New Batch Migration",
+                      "Start fresh migration batch")
+        table.add_row("2", "Patch Existing Migration",
+                      "Update existing migration")
+
+        self.console.print(table)
+
+        choice = Prompt.ask(
+            "\nSelect migration type [1/2]",
+            choices=["1", "2"],
+            default="1"
+        )
+
+        if choice == "1":
+            self.console.print(
+                "[green]✓[/green] Selected: New Batch Migration")
+            return "new", None
+        else:
+            self.console.print(
+                "[green]✓[/green] Selected: Patch Existing Migration")
+
+            # Show existing projects
+            existing_project = self._select_existing_project()
+            return "patch", existing_project
+
+    def _select_existing_project(self) -> Optional[ProjectConfig]:
+        """Select from existing projects"""
+        projects = self.project_manager.list_projects()
+
+        if not projects:
+            self.console.print(
+                "[yellow]⚠[/yellow] No existing projects found. Creating new project...")
+            return None
+
+        self.console.print(
+            f"\n[cyan]Found {len(projects)} existing project(s):[/cyan]\n")
+
+        table = Table(show_header=True, box=None)
+        table.add_column("ID", style="cyan", width=3)
+        table.add_column("Project Name", style="white")
+        table.add_column("Status", style="bold")
+        table.add_column("Last Updated", style="dim")
+        table.add_column("Auth Method", style="dim")
+
+        for i, project in enumerate(projects, 1):
+            status_color = {
+                ProjectStatus.CREATED: "yellow",
+                ProjectStatus.IN_PROGRESS: "blue",
+                ProjectStatus.COMPLETED: "green",
+                ProjectStatus.FAILED: "red",
+                ProjectStatus.ARCHIVED: "dim"
+            }.get(project.status, "white")
+
+            # Format last updated time
+            try:
+                updated_dt = datetime.fromisoformat(project.updated_at)
+                updated_str = updated_dt.strftime("%Y-%m-%d %H:%M")
+            except:
+                updated_str = project.updated_at
+
+            table.add_row(
+                str(i),
+                project.project_name,
+                f"[{status_color}]{project.status.value.title()}[/{status_color}]",
+                updated_str,
+                project.auth_config.auth_method.value
+            )
+
+        self.console.print(table)
+
+        # Add option to create new project
+        max_choice = len(projects)
+        choices = [str(i) for i in range(1, max_choice + 1)] + ["n"]
+
+        self.console.print(
+            f"\n[dim]Enter 'n' to create a new project instead[/dim]")
+
+        choice = Prompt.ask(
+            f"Select project [1-{max_choice}/n]",
+            choices=choices
+        )
+
+        if choice == "n":
+            return None
+
+        selected_project = projects[int(choice) - 1]
+        self.console.print(
+            f"[green]✓[/green] Selected project: {selected_project.project_name}")
+
+        return selected_project
+
+    def prompt_new_project_creation(self, auth_config: ProjectAuthConfig) -> ProjectConfig:
+        """Create a new project with authentication configuration"""
+        self.console.print(
+            f"\n[bold cyan]Creating New Migration Project[/bold cyan]\n")
+
+        # Get project name
+        project_name = Prompt.ask(
+            "Enter project name",
+            default=f"Migration_{datetime.now().strftime('%Y%m%d_%H%M')}"
+        )
+
+        # Get optional description
+        description = Prompt.ask("Project description (optional)", default="")
+        description = description.strip() or None
+
+        # Create project
+        project = self.project_manager.create_project(
+            project_name=project_name,
+            auth_config=auth_config,
+            description=description
+        )
+
+        self.console.print(
+            f"[green]✓[/green] Created project: {project.project_name}")
+        self.console.print(
+            f"[dim]→ Project folder: {project.project_path}[/dim]")
+        self.console.print(f"[dim]→ LZ files: {project.lz_folder}[/dim]")
+        self.console.print(
+            f"[dim]→ Server files: {project.servers_folder}[/dim]")
+        self.console.print(f"[dim]→ Results: {project.results_folder}[/dim]\n")
+
+        return project
+
+    def prompt_authentication_config(self) -> ProjectAuthConfig:
+        """
+        Prompt user for authentication configuration.
+
+        Returns:
+            ProjectAuthConfig: Authentication configuration for the project
+        """
+        self.console.print(
+            f"\n[bold cyan]🔐 Azure Authentication Setup[/bold cyan]\n")
+
+        # Authentication method selection
+        table = Table(show_header=False, box=None, padding=(0, 2))
+        table.add_column("Number", style="cyan")
+        table.add_column("Method", style="white")
+        table.add_column("Description", style="dim")
+
+        auth_methods = [
+            ("1", "Azure CLI", "Use existing Azure CLI login (az login)"),
+            ("2", "Service Principal", "Use Azure Service Principal credentials"),
+            ("3", "Managed Identity", "Use Azure Managed Identity (for Azure VMs)"),
+            ("4", "Interactive", "Interactive browser-based authentication"),
+            ("5", "Device Code", "Device code flow for restricted environments"),
+            ("6", "Default", "Auto-detect best authentication method")
+        ]
+
+        for num, name, desc in auth_methods:
+            table.add_row(num, name, desc)
+
+        self.console.print(table)
+
+        choice = Prompt.ask(
+            "\nSelect authentication method [1-6]",
+            choices=["1", "2", "3", "4", "5", "6"],
+            default="1"
+        )
+
+        auth_method_map = {
+            "1": AuthMethod.AZURE_CLI,
+            "2": AuthMethod.SERVICE_PRINCIPAL,
+            "3": AuthMethod.MANAGED_IDENTITY,
+            "4": AuthMethod.INTERACTIVE,
+            "5": AuthMethod.DEVICE_CODE,
+            "6": AuthMethod.DEFAULT
+        }
+
+        auth_method = auth_method_map[choice]
+        self.console.print(f"[green]✓[/green] Selected: {auth_method.value}")
+
+        # Collect additional parameters based on method
+        tenant_id = None
+        client_id = None
+        subscription_id = None
+
+        if auth_method == AuthMethod.SERVICE_PRINCIPAL:
+            self.console.print(
+                f"\n[yellow]Service Principal Configuration:[/yellow]")
+            tenant_id = Prompt.ask("Azure Tenant ID")
+            client_id = Prompt.ask("Azure Client ID")
+            self.console.print(
+                "[dim]Note: Client secret will be prompted securely during authentication[/dim]")
+
+        elif auth_method == AuthMethod.MANAGED_IDENTITY:
+            self.console.print(
+                f"\n[yellow]Managed Identity Configuration:[/yellow]")
+            client_id = Prompt.ask(
+                "Client ID (optional, for user-assigned MI)", default="")
+            client_id = client_id.strip() or None
+
+        # Optional subscription ID for all methods
+        if Confirm.ask(f"\nDo you want to specify a default Azure subscription ID?", default=False):
+            subscription_id = Prompt.ask("Azure Subscription ID")
+
+        return ProjectAuthConfig(
+            auth_method=auth_method,
+            tenant_id=tenant_id,
+            client_id=client_id,
+            subscription_id=subscription_id,
+            created_at=datetime.now().isoformat()
+        )
 
     def prompt_operation_type(self) -> str:
         """
@@ -104,10 +329,10 @@ class InteractivePrompter:
                     return None
 
     def prompt_landing_zone_file(self) -> Optional[str]:
-        """Prompt for Landing Zone configuration file (CSV or JSON)."""
+        """Prompt for Landing Zone configuration file using template manager."""
         self.console.print("\n[bold]📋 Landing Zone Configuration[/bold]")
         self.console.print(
-            "Provide a CSV or JSON file with Landing Zone details\n")
+            "Select a template or provide a custom file with Landing Zone details\n")
 
         # Show template information
         self.console.print("[dim]Required columns/fields:[/dim]")
@@ -117,83 +342,73 @@ class InteractivePrompter:
         table.add_column("Example", style="dim")
 
         table.add_row("subscription_id", "12345678-1234-...")
-        table.add_row("resource_group", "migrate-rg")
         table.add_row("migrate_project_name", "MigrateProject-EastUS")
-        table.add_row("recovery_vault_name", "RecoveryVault-EastUS")
+        table.add_row("appliance_type", "vmware|hyperv|physical")
+        table.add_row("appliance_name", "MigrateAppliance-VMware-EastUS")
         table.add_row("region", "eastus")
         table.add_row("cache_storage_account", "cachestorage001")
-        table.add_row("appliance_name", "MigrateAppliance-VMware-EastUS")
-        table.add_row("virtualization_type", "vmware|hyperv|physical")
+        table.add_row("cache_storage_resource_group", "rg-storage-eastus")
+        table.add_row("migrate_project_subscription", "12345678-1234-...")
+        table.add_row("migrate_resource_group", "migrate-rg")
 
         self.console.print(table)
         self.console.print()
 
-        self.console.print("[dim]Virtualization types:[/dim]")
+        self.console.print("[dim]Appliance types:[/dim]")
         self.console.print("  [cyan]•[/cyan] vmware  - VMware vSphere")
         self.console.print("  [cyan]•[/cyan] hyperv  - Microsoft Hyper-V")
         self.console.print(
             "  [cyan]•[/cyan] physical - Physical/AWS/GCP/Xen/Other")
         self.console.print()
 
-        # Show template file locations
-        template_csv = "examples/template_landing_zones.csv"
-        template_json = "examples/template_landing_zones.json"
+        # Use template manager for file selection
+        return self.template_manager.select_lz_template(allow_new=True)
 
-        if os.path.isfile(template_csv) or os.path.isfile(template_json):
-            self.console.print("[dim]Template files available:[/dim]")
-            if os.path.isfile(template_csv):
-                self.console.print(f"  [cyan]→[/cyan] {template_csv}")
-            if os.path.isfile(template_json):
-                self.console.print(f"  [cyan]→[/cyan] {template_json}")
-            self.console.print()
-
-        file_type = Prompt.ask(
-            "[cyan]File format[/cyan]",
-            choices=["csv", "json"],
-            default="csv"
-        )
-
-        # Check if user wants to use template
-        if file_type == "csv" and os.path.isfile(template_csv):
-            use_template = Confirm.ask(
-                f"[cyan]Use template file: {template_csv}?[/cyan]",
-                default=False
-            )
-            if use_template:
-                return template_csv
-        elif file_type == "json" and os.path.isfile(template_json):
-            use_template = Confirm.ask(
-                f"[cyan]Use template file: {template_json}?[/cyan]",
-                default=False
-            )
-            if use_template:
-                return template_json
-
-        return self.prompt_file_path(f"Landing Zone {file_type.upper()}")
-
-    def prompt_servers_file(self) -> str:
-        """Prompt for servers Excel file."""
-        self.console.print("\n[bold]📊 Servers Configuration[/bold]")
+    def prompt_servers_file(self) -> Optional[str]:
+        """Prompt for servers configuration file using template manager."""
+        self.console.print("\n[bold]📊 Server Configuration[/bold]")
         self.console.print(
-            "Provide an Excel file with server mapping details\n")
+            "Select a server template or provide a custom file with server and Landing Zone details\n")
 
-        # Check for common file locations
-        common_paths = [
-            "servers.xlsx",
-            "migration.xlsx",
-            "tests/data/sample_migration.xlsx"
-        ]
+        # Show template information
+        self.console.print("[dim]Server columns required:[/dim]")
 
-        for path in common_paths:
-            if os.path.isfile(path):
-                use_default = Confirm.ask(
-                    f"[cyan]Use found file: {path}?[/cyan]",
-                    default=True
-                )
-                if use_default:
-                    return path
+        server_table = Table(show_header=True, box=None, padding=(0, 1))
+        server_table.add_column("Field", style="cyan")
+        server_table.add_column("Example", style="dim")
 
-        return self.prompt_file_path("Excel (servers)")  # type: ignore
+        server_table.add_row("target_machine", "example-server-01")
+        server_table.add_row("target_region", "eastus")
+        server_table.add_row("target_subscription", "aaaaaaaa-bbbb-cccc...")
+        server_table.add_row("target_rg", "example-target-rg")
+        server_table.add_row("target_vnet", "example-vnet")
+        server_table.add_row("target_subnet", "example-subnet")
+        server_table.add_row("target_machine_sku", "Standard_D4s_v3")
+        server_table.add_row("target_disk_type", "StandardSSD_LRS")
+
+        self.console.print(server_table)
+        self.console.print()
+
+        self.console.print(
+            "[dim]Landing Zone columns (for integrated templates):[/dim]")
+
+        lz_table = Table(show_header=True, box=None, padding=(0, 1))
+        lz_table.add_column("Field", style="yellow")
+        lz_table.add_column("Example", style="dim")
+
+        lz_table.add_row("migrate_project_subscription", "12345678-1234-...")
+        lz_table.add_row("migrate_project_name", "MigrateProject-EastUS")
+        lz_table.add_row("appliance_type", "vmware|hyperv|physical")
+        lz_table.add_row("appliance_name", "MigrateAppliance-VMware-EastUS")
+        lz_table.add_row("cache_storage_account", "cachestorage001")
+        lz_table.add_row("cache_storage_resource_group", "rg-storage-eastus")
+        lz_table.add_row("migrate_resource_group", "migrate-rg")
+
+        self.console.print(lz_table)
+        self.console.print()
+
+        # Use template manager for file selection
+        return self.template_manager.select_server_template(allow_new=True)
 
     def prompt_export_json(self) -> Optional[str]:
         """Prompt for JSON export path."""
@@ -212,221 +427,6 @@ class InteractivePrompter:
         )
 
         return json_path
-
-    def prompt_validation_config(self) -> Optional[str]:
-        """Prompt for validation configuration file."""
-        self.console.print("\n[bold]⚙️ Validation Configuration[/bold]")
-
-        # Check if default config exists
-        default_config = "validation_config.yaml"
-
-        if os.path.isfile(default_config):
-            use_default = Confirm.ask(
-                f"[cyan]Use existing config: {default_config}?[/cyan]",
-                default=True
-            )
-            if use_default:
-                return default_config
-
-        # Offer to create default config
-        create_config = Confirm.ask(
-            "[cyan]Create default validation configuration?[/cyan]",
-            default=True
-        )
-
-        if create_config:
-            from .config.validation_config import ValidationConfigLoader
-            try:
-                config_path = ValidationConfigLoader.create_default_config()
-                self.console.print(f"[green]✓[/green] Created: {config_path}")
-                return config_path
-            except FileExistsError:
-                return default_config
-
-        # Prompt for custom config
-        use_custom = Confirm.ask(
-            "[cyan]Use custom validation config file?[/cyan]",
-            default=False
-        )
-
-        if use_custom:
-            return self.prompt_file_path("Validation YAML", required=False)
-
-        return None
-
-    def prompt_validation_profile(self) -> Optional[str]:
-        """Prompt for validation profile selection."""
-        self.console.print("\n[bold]📋 Validation Profile[/bold]\n")
-
-        table = Table(show_header=False, box=None, padding=(0, 2))
-        table.add_column("Number", style="cyan")
-        table.add_column("Profile", style="white")
-        table.add_column("Description", style="dim")
-
-        profiles = [
-            ("1", "full", "All validations (production)"),
-            ("2", "quick", "Fast validation (development)"),
-            ("3", "rbac_only", "Permission checks only"),
-            ("4", "resource_only", "Infrastructure checks only"),
-            ("5", "default", "Standard validation set")
-        ]
-
-        for num, name, desc in profiles:
-            table.add_row(num, name, desc)
-
-        self.console.print(table)
-        self.console.print()
-
-        use_profile = Confirm.ask(
-            "[cyan]Use a validation profile?[/cyan]",
-            default=True
-        )
-
-        if not use_profile:
-            return None
-
-        choice = Prompt.ask(
-            "[cyan]Select profile[/cyan]",
-            choices=["1", "2", "3", "4", "5"],
-            default="1"
-        )
-
-        profile_map = {
-            "1": "full",
-            "2": "quick",
-            "3": "rbac_only",
-            "4": "resource_only",
-            "5": "default"
-        }
-
-        selected = profile_map[choice]
-        self.console.print(f"[green]✓[/green] Selected profile: {selected}")
-        return selected
-
-    def configure_validations_interactive(self, config_path: Optional[str] = None) -> Dict[str, Any]:
-        """
-        Interactive validation configuration editor.
-
-        Args:
-            config_path: Path to existing config file
-
-        Returns:
-            Dict: Updated validation configuration
-        """
-        from .config.validation_config import ValidationConfigLoader
-
-        self.console.print(
-            "\n[bold cyan]⚙️ Interactive Validation Configuration[/bold cyan]\n")
-
-        # Load existing config or create new
-        if config_path and os.path.isfile(config_path):
-            loader = ValidationConfigLoader.load(config_path)
-            config = loader.config_data
-            self.console.print(
-                f"[green]✓[/green] Loaded config: {config_path}\n")
-        else:
-            # Create default config structure
-            config = {
-                "landing_zone": {
-                    "access_validation": {"enabled": True},
-                    "appliance_health": {"enabled": True},
-                    "storage_cache": {"enabled": True},
-                    "quota_validation": {"enabled": True}
-                },
-                "servers": {
-                    "region_validation": {"enabled": True},
-                    "resource_group_validation": {"enabled": True},
-                    "vnet_subnet_validation": {"enabled": True},
-                    "vm_sku_validation": {"enabled": True},
-                    "disk_type_validation": {"enabled": True},
-                    "discovery_validation": {"enabled": True},
-                    "rbac_validation": {"enabled": True}
-                },
-                "global": {
-                    "fail_fast": False,
-                    "parallel_execution": False
-                },
-                "active_profile": "default"
-            }
-            self.console.print(
-                "[yellow]ℹ[/yellow] Using default configuration\n")
-
-        # Landing Zone Validations
-        self.console.print("[bold]Landing Zone Validations:[/bold]\n")
-
-        lz_validations = {
-            "Access Validation (RBAC)": "landing_zone.access_validation.enabled",
-            "Appliance Health": "landing_zone.appliance_health.enabled",
-            "Storage Cache": "landing_zone.storage_cache.enabled",
-            "Quota Validation": "landing_zone.quota_validation.enabled"
-        }
-
-        for name, path in lz_validations.items():
-            current = self._get_nested_value(config, path)
-            enabled = Confirm.ask(
-                f"[cyan]{name}[/cyan] (current: {current})",
-                default=current
-            )
-            self._set_nested_value(config, path, enabled)
-
-        # Servers Validations
-        self.console.print("\n[bold]Server Validations:[/bold]\n")
-
-        server_validations = {
-            "Region Validation": "servers.region_validation.enabled",
-            "Resource Group": "servers.resource_group_validation.enabled",
-            "VNet/Subnet": "servers.vnet_subnet_validation.enabled",
-            "VM SKU": "servers.vm_sku_validation.enabled",
-            "Disk Type": "servers.disk_type_validation.enabled",
-            "Discovery Status": "servers.discovery_validation.enabled",
-            "RBAC Permissions": "servers.rbac_validation.enabled"
-        }
-
-        for name, path in server_validations.items():
-            current = self._get_nested_value(config, path)
-            enabled = Confirm.ask(
-                f"[cyan]{name}[/cyan] (current: {current})",
-                default=current
-            )
-            self._set_nested_value(config, path, enabled)
-
-        # Global Settings
-        self.console.print("\n[bold]Global Settings:[/bold]\n")
-
-        fail_fast = Confirm.ask(
-            "[cyan]Fail fast (stop on first error)?[/cyan]",
-            default=self._get_nested_value(config, "global.fail_fast", False)
-        )
-        self._set_nested_value(config, "global.fail_fast", fail_fast)
-
-        parallel = Confirm.ask(
-            "[cyan]Parallel execution?[/cyan]",
-            default=self._get_nested_value(
-                config, "global.parallel_execution", False)
-        )
-        self._set_nested_value(config, "global.parallel_execution", parallel)
-
-        # Save configuration
-        save_config = Confirm.ask(
-            "\n[cyan]Save configuration to file?[/cyan]",
-            default=True
-        )
-
-        if save_config:
-            save_path = Prompt.ask(
-                "[cyan]Save as[/cyan]",
-                default=config_path or "validation_config.yaml"
-            )
-
-            # Save YAML
-            import yaml
-            with open(save_path, 'w') as f:
-                yaml.dump(config, f, default_flow_style=False, sort_keys=False)
-
-            self.console.print(
-                f"[green]✓[/green] Configuration saved: {save_path}\n")
-
-        return config
 
     def _get_nested_value(self, config: Dict, path: str, default: Any = True) -> Any:
         """Get nested dictionary value using dot notation."""
@@ -512,35 +512,21 @@ def get_interactive_inputs(mode: str, provided_params: Dict[str, Any]) -> Dict[s
     operation = params['operation']
 
     # Handle different operations
+    # Validation configuration is no longer supported as separate operation
+    # Settings are now managed via project-persistent ValidationSettings
     if operation == 'configure_validations':
-        config = prompter.configure_validations_interactive(
-            params.get('validation_config'))
-        params['validation_config_dict'] = config
+        console.print(
+            "[yellow]⚠ Configure Validations operation is deprecated.[/yellow]")
+        console.print(
+            "[dim]Validation settings are now managed per-project via the wizard interface.[/dim]")
+        console.print(
+            "[dim]Use 'azmig' (wizard mode) to manage project validation settings.[/dim]")
         return params
 
-    # Prompt for validation config if not provided
-    config_was_prompted = False
-    if 'validation_config' not in params or params['validation_config'] is None:
-        params['validation_config'] = prompter.prompt_validation_config()
-        config_was_prompted = True
-
-    # Prompt for validation profile if not provided
-    # Skip profile prompt if user just selected a custom config file
-    if 'validation_profile' not in params or params['validation_profile'] is None:
-        # Check if user provided a custom config file
-        has_custom_config = params.get('validation_config') is not None
-
-        if has_custom_config and config_was_prompted:
-            # User just chose a custom config - skip profile and inform them
-            console.print(
-                "[dim]Using custom validation config without profile overrides[/dim]\n")
-            params['validation_profile'] = None
-        elif not has_custom_config:
-            # No config file - offer validation profile
-            params['validation_profile'] = prompter.prompt_validation_profile()
-        else:
-            # Config was provided via CLI, still offer profile as override option
-            params['validation_profile'] = prompter.prompt_validation_profile()
+    # Validation configuration is now project-persistent via ValidationSettings
+    # No need to prompt for separate validation config files
+    params['validation_config'] = None
+    params['validation_profile'] = None
 
     # Operation-specific prompts
     if operation in ['lz_validation', 'full_wizard']:
@@ -550,6 +536,19 @@ def get_interactive_inputs(mode: str, provided_params: Dict[str, Any]) -> Dict[s
     if operation in ['server_validation', 'replication', 'full_wizard']:
         if 'excel' not in params or params['excel'] is None:
             params['excel'] = prompter.prompt_servers_file()
+
+            # Try to extract Azure configuration from server file
+            if params['excel']:
+                azure_config = prompter.template_manager.extract_azure_config_from_server_file(
+                    params['excel'])
+                if azure_config:
+                    console.print(
+                        f"\n[green]✓[/green] Extracted Azure configuration from server file")
+                    console.print(
+                        f"[dim]Subscription ID: {azure_config.get('subscription_id', 'Not found')}[/dim]")
+                    console.print(
+                        f"[dim]Migrate Project: {azure_config.get('migrate_project_name', 'Not found')}[/dim]")
+                    params['extracted_azure_config'] = azure_config
 
     # Export JSON prompt
     if 'export_json' not in params or params['export_json'] is None:

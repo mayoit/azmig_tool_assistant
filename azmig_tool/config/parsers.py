@@ -394,9 +394,9 @@ class ConfigParser:
 
             # Check for duplicate machine names
             duplicates = self.df[self.df.duplicated(
-                subset=['target_machine_name'], keep=False)]
+                subset=['machine_name'], keep=False)]
             if not duplicates.empty:
-                dup_names = duplicates['target_machine_name'].tolist()
+                dup_names = duplicates['machine_name'].tolist()
                 return ValidationResult(
                     stage=ValidationStage.EXCEL_STRUCTURE,
                     passed=False,
@@ -446,8 +446,8 @@ class ConfigParser:
         for idx, row in self.df.iterrows():
             try:
                 config = MigrationConfig(
-                    target_machine_name=str(
-                        row['target_machine_name']).strip(),
+                    machine_name=str(
+                        row['machine_name']).strip(),
                     target_region=str(row['target_region']).strip(),
                     target_subscription=str(
                         row['target_subscription']).strip(),
@@ -456,10 +456,8 @@ class ConfigParser:
                     target_subnet=str(row['target_subnet']).strip(),
                     target_machine_sku=str(row['target_machine_sku']).strip(),
                     target_disk_type=str(row['target_disk_type']).strip(),
-                    source_machine_name=str(
-                        row.get('source_machine_name', '')).strip() or None,
-                    recovery_vault_name=str(
-                        row.get('recovery_vault_name', '')).strip() or None
+                    migrate_project_name=str(
+                        row['migrate_project_name']).strip()
                 )
                 configs.append(config)
             except ValueError as e:
@@ -556,9 +554,9 @@ class ConfigParser:
 
             # Check for duplicate machine names
             duplicates = self.df[self.df.duplicated(
-                subset=['target_machine_name'], keep=False)]
+                subset=['machine_name'], keep=False)]
             if not duplicates.empty:
-                dup_names = duplicates['target_machine_name'].tolist()
+                dup_names = duplicates['machine_name'].tolist()
                 return ValidationResult(
                     stage=ValidationStage.EXCEL_STRUCTURE,
                     passed=False,
@@ -609,27 +607,30 @@ class ConfigParser:
             try:
                 config = ConsolidatedMigrationConfig(
                     # Landing Zone fields
-                    migrate_project_subscription=str(row['migrate_project_subscription']).strip(),
-                    migrate_project_name=str(row['migrate_project_name']).strip(),
+                    migrate_project_subscription=str(
+                        row['migrate_project_subscription']).strip(),
+                    migrate_project_name=str(
+                        row['migrate_project_name']).strip(),
                     appliance_type=str(row['appliance_type']).strip(),
                     appliance_name=str(row['appliance_name']).strip(),
-                    cache_storage_account=str(row['cache_storage_account']).strip(),
-                    cache_storage_resource_group=str(row['cache_storage_resource_group']).strip(),
-                    migrate_resource_group=str(row['migrate_resource_group']).strip(),
-                    
+                    cache_storage_account=str(
+                        row['cache_storage_account']).strip(),
+                    cache_storage_resource_group=str(
+                        row['cache_storage_resource_group']).strip(),
+                    migrate_resource_group=str(
+                        row['migrate_resource_group']).strip(),
+
                     # Server fields
-                    target_machine_name=str(row['target_machine_name']).strip(),
+                    machine_name=str(
+                        row['machine_name']).strip(),
                     target_region=str(row['target_region']).strip(),
-                    target_subscription=str(row['target_subscription']).strip(),
+                    target_subscription=str(
+                        row['target_subscription']).strip(),
                     target_rg=str(row['target_rg']).strip(),
                     target_vnet=str(row['target_vnet']).strip(),
                     target_subnet=str(row['target_subnet']).strip(),
                     target_machine_sku=str(row['target_machine_sku']).strip(),
-                    target_disk_type=str(row['target_disk_type']).strip(),
-                    
-                    # Optional fields
-                    source_machine_name=str(row.get('source_machine_name', '')).strip() or None,
-                    recovery_vault_name=str(row.get('recovery_vault_name', '')).strip() or None
+                    target_disk_type=str(row['target_disk_type']).strip()
                 )
                 configs.append(config)
             except ValueError as e:
@@ -710,7 +711,7 @@ class ConfigParser:
     def detect_excel_format(self) -> str:
         """
         Auto-detect Excel format (consolidated vs. servers-only)
-        
+
         Returns:
             'consolidated' if it has both LZ and server columns
             'servers' if it has only server columns
@@ -718,31 +719,36 @@ class ConfigParser:
         """
         if self.file_type != 'excel':
             return 'unknown'
-            
+
         try:
             # Read Excel file to check columns
             df = pd.read_excel(self.config_path)
             if df.empty:
                 return 'unknown'
-            
+
             # Strip spaces from column names
             columns = [col.strip() for col in df.columns]
-            
+
             # Check for consolidated format (has both LZ and server columns)
-            lz_cols_present = sum(1 for col in CONSOLIDATED_REQUIRED_COLUMNS[:7] if col in columns)  # First 7 are LZ columns
-            server_cols_present = sum(1 for col in CONSOLIDATED_REQUIRED_COLUMNS[7:] if col in columns)  # Rest are server columns
-            
+            # First 7 are LZ columns
+            lz_cols_present = sum(
+                1 for col in CONSOLIDATED_REQUIRED_COLUMNS[:7] if col in columns)
+            # Rest are server columns
+            server_cols_present = sum(
+                1 for col in CONSOLIDATED_REQUIRED_COLUMNS[7:] if col in columns)
+
             # If it has most LZ columns (5+ out of 7) and server columns, it's consolidated
             if lz_cols_present >= 5 and server_cols_present >= 6:
                 return 'consolidated'
-            
+
             # Check for traditional server format (has server columns but few/no LZ columns)
-            server_traditional = sum(1 for col in SERVERS_REQUIRED_COLUMNS if col in columns)
+            server_traditional = sum(
+                1 for col in SERVERS_REQUIRED_COLUMNS if col in columns)
             if server_traditional >= 6 and lz_cols_present <= 2:
                 return 'servers'
-                
+
             return 'unknown'
-            
+
         except Exception:
             return 'unknown'
 
@@ -759,12 +765,14 @@ class ConfigParser:
             return self.parse_landing_zone()
         elif self.file_type == 'excel':
             excel_format = self.detect_excel_format()
-            
+
             if excel_format == 'consolidated':
-                console.print("[cyan]Detected consolidated Excel template (Landing Zone + Servers)[/cyan]")
+                console.print(
+                    "[cyan]Detected consolidated Excel template (Landing Zone + Servers)[/cyan]")
                 return self.parse_consolidated()
             elif excel_format == 'servers':
-                console.print("[cyan]Detected traditional server Excel template[/cyan]")
+                console.print(
+                    "[cyan]Detected traditional server Excel template[/cyan]")
                 return self.parse_servers()
             else:
                 return False, [], [ValidationResult(

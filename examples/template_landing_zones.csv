@@ -1,3 +1,0 @@
-Subscription ID,Migrate Project Name,Appliance Type,Appliance Name,Region,Cache Storage Account,Cache Storage Resource Group,Migrate Project Subscription,Migrate Resource Group,Recovery Vault Name
-4bf7f595-ef2c-42f9-b4e3-f2c49b080b25,p-az1-migrate04,physical,p-az1-azmig02,uksouth,migrate4bf7flsa88644,p-az1-migrate04-rg,4bf7f595-ef2c-42f9-b4e3-f2c49b080b25,p-az1-migrate04-rg,p-az1-migrate04-MigrateVault-1687674646
-b645b354-11fb-4f23-b006-856c378dd73a,p-az1-migrate04,physical,p-az1-azmig02,uksouth,uukstramigrate01,u-uks-tradevtest-migration-rg-01,4bf7f595-ef2c-42f9-b4e3-f2c49b080b25,p-az1-migrate04-rg,p-az1-migrate04-MigrateVault-1687674646

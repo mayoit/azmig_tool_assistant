@@ -107,15 +107,15 @@ The tool automatically searches for:
 
 ---
 
-## Validation Profiles
+## Project Validation Settings
 
-| # | Profile | Description | Use Case |
-|---|---------|-------------|----------|
-| 1 | `full` | All validations | Production deployments |
-| 2 | `quick` | Fast validation | Development/testing |
-| 3 | `rbac_only` | Permission checks only | Security audits |
-| 4 | `resource_only` | Infrastructure checks only | Resource verification |
-| 5 | `default` | Standard validation set | General purpose |
+Azure Migration Tool uses **project-persistent validation settings** that are saved with each migration project. Settings are configured once per project and automatically applied to all validations.
+
+### Configuration Management
+- **Per-Project**: Settings are saved in `project.json` 
+- **Interactive Editor**: Modify settings via wizard interface
+- **Preset Profiles**: Default, Quick, and Full validation profiles
+- **Persistent**: No need to reconfigure for each session
 
 ---
 
@@ -347,19 +347,18 @@ azmig
 - Modify with your actual data
 - Validate format before using
 
-### 3. Create Custom Validation Profiles
+### 3. Configure Project Validation Settings
 ```bash
-# Configure once, use many times
-azmig --mock
-# Select: 4 (Configure Validations)
-# Save as: my_custom_profile.yaml
+# Use wizard to manage project settings
+azmig
+# Project settings are saved automatically
+# Modify via validation settings editor
 ```
 
-### 4. Use Validation Profiles for Different Environments
-- **Development**: `quick` profile
-- **UAT**: `default` profile
-- **Production**: `full` profile
-- **Security Audit**: `rbac_only` profile
+### 4. Use Preset Profiles for Different Scenarios
+- **Development**: Quick profile (minimal validations)
+- **UAT**: Default profile (balanced validation)
+- **Production**: Full profile (comprehensive validation)
 
 ### 5. Export Results for Documentation
 - Always export JSON for production runs

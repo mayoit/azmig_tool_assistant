@@ -1,8 +1,16 @@
 """
-Validation Configuration Loader
+Validation Configuration Loader (Backward Compatibility)
 
-This module loads and provides access to validation configuration settings
+⚠️  LEGACY SYSTEM - For backward compatibility only
+    Primary validation settings are now managed via ValidationSettings model (see models.py)
+    This module exists to support existing code that references ValidationConfig
+
+This module loads and provides access to legacy validation configuration settings
 that allow users to enable/disable specific validation checks.
+
+For new development, use:
+- ValidationSettings model for project-persistent validation configuration
+- Project-level settings that are saved with Azure Migrate project data
 """
 
 import os
@@ -16,51 +24,14 @@ from dataclasses import dataclass, field
 class ValidationConfig:
     """
     Holds validation configuration settings
+
+    ⚠️  LEGACY CLASS - For backward compatibility only
+        Use ValidationSettings model (see models.py) for new development
+
+    This class provides basic validation configuration functionality for
+    existing code that still references the old validation config system.
     """
     config_data: Dict[str, Any] = field(default_factory=dict)
-    active_profile: str = "default"
-
-    def __post_init__(self):
-        """Apply active profile if specified"""
-        if self.active_profile and self.active_profile != "default":
-            self._apply_profile(self.active_profile)
-
-    def _apply_profile(self, profile_name: str):
-        """
-        Apply a validation profile by overriding config values
-
-        Args:
-            profile_name: Name of the profile to apply
-        """
-        profiles = self.config_data.get("profiles", {})
-        if profile_name not in profiles:
-            raise ValueError(
-                f"Profile '{profile_name}' not found in configuration")
-
-        profile = profiles[profile_name]
-        overrides = profile.get("overrides", {})
-
-        # Apply each override
-        for key_path, value in overrides.items():
-            self._set_nested_value(key_path, value)
-
-    def _set_nested_value(self, key_path: str, value: Any):
-        """
-        Set a nested dictionary value using dot notation
-
-        Args:
-            key_path: Dot-separated path (e.g., "landing_zone.access_validation.enabled")
-            value: Value to set
-        """
-        keys = key_path.split(".")
-        data = self.config_data
-
-        for key in keys[:-1]:
-            if key not in data:
-                data[key] = {}
-            data = data[key]
-
-        data[keys[-1]] = value
 
     def _get_nested_value(self, key_path: str, default: Any = None) -> Any:
         """
@@ -204,6 +175,12 @@ class ValidationConfig:
 class ValidationConfigLoader:
     """
     Loads validation configuration from YAML file
+
+    ⚠️  LEGACY CLASS - For backward compatibility only
+        Use ValidationSettings model (see models.py) for new development
+
+    This class provides functionality to load legacy validation_config.yaml files
+    for existing code that still references the old validation config system.
     """
 
     DEFAULT_CONFIG_FILENAME = "validation_config.yaml"
@@ -241,10 +218,7 @@ class ValidationConfigLoader:
         if config_data is None:
             config_data = {}
 
-        # Get active profile
-        active_profile = config_data.get("active_profile", "default")
-
-        return ValidationConfig(config_data=config_data, active_profile=active_profile)
+        return ValidationConfig(config_data=config_data)
 
     @staticmethod
     def _find_default_config() -> str:
@@ -326,8 +300,7 @@ class ValidationConfigLoader:
                 "global": {
                     "fail_fast": False,
                     "parallel_execution": False
-                },
-                "active_profile": "default"
+                }
             }
 
             with open(output_path, 'w', encoding='utf-8') as f:

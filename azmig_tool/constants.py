@@ -78,17 +78,17 @@ SERVERS_REQUIRED_COLUMNS = [
     "Target VNet",
     "Target Subnet",
     "Target Machine SKU",
-    "Target Disk Type"
+    "Target Disk Type",
+    "Migrate Project Name"
 ]
 
 SERVERS_OPTIONAL_COLUMNS = [
-    "Source Machine",
-    "Recovery Vault Name"
+    # Recovery vault will be auto-discovered from migrate project
 ]
 
 # Column mapping from Excel display names to internal model fields
 SERVERS_COLUMN_MAPPING = {
-    "Target Machine": "target_machine_name",
+    "Target Machine": "machine_name",
     "Target Region": "target_region",
     "Target Subscription": "target_subscription",
     "Target RG": "target_rg",
@@ -96,8 +96,7 @@ SERVERS_COLUMN_MAPPING = {
     "Target Subnet": "target_subnet",
     "Target Machine SKU": "target_machine_sku",
     "Target Disk Type": "target_disk_type",
-    "Source Machine": "source_machine_name",
-    "Recovery Vault Name": "recovery_vault_name"
+    "Migrate Project Name": "migrate_project_name"
 }
 
 # =============================================================================
@@ -107,14 +106,14 @@ SERVERS_COLUMN_MAPPING = {
 CONSOLIDATED_REQUIRED_COLUMNS = [
     # Landing Zone columns
     "Migrate Project Subscription",
-    "Migrate Project Name", 
+    "Migrate Project Name",
     "Appliance Type",
     "Appliance Name",
     "Cache Storage Account",
     "Cache Storage Resource Group",
     "Migrate Resource Group",
-    
-    # Server columns  
+
+    # Server columns
     "Target Machine",
     "Target Region",
     "Target Subscription",
@@ -135,14 +134,14 @@ CONSOLIDATED_COLUMN_MAPPING = {
     # Landing Zone fields
     "Migrate Project Subscription": "migrate_project_subscription",
     "Migrate Project Name": "migrate_project_name",
-    "Appliance Type": "appliance_type", 
+    "Appliance Type": "appliance_type",
     "Appliance Name": "appliance_name",
     "Cache Storage Account": "cache_storage_account",
     "Cache Storage Resource Group": "cache_storage_resource_group",
     "Migrate Resource Group": "migrate_resource_group",
-    
+
     # Server fields
-    "Target Machine": "target_machine_name",
+    "Target Machine": "machine_name",
     "Target Region": "target_region",
     "Target Subscription": "target_subscription",
     "Target RG": "target_rg",
@@ -150,10 +149,9 @@ CONSOLIDATED_COLUMN_MAPPING = {
     "Target Subnet": "target_subnet",
     "Target Machine SKU": "target_machine_sku",
     "Target Disk Type": "target_disk_type",
-    
-    # Optional fields
-    "Source Machine": "source_machine_name",
-    "Recovery Vault Name": "recovery_vault_name"
+
+    # Optional fields - removed as no longer needed
+    # Recovery vault will be auto-discovered from migrate project
 }
 
 # Backward compatibility aliases

@@ -120,9 +120,17 @@ The Azure Bulk Migration Tool is a comprehensive CLI solution for migrating serv
 - Interactive prompts with intelligent defaults
 - Color-coded status indicators (✓/✗)
 - Progress tables and summaries
-- File template suggestions
+- **Organized template system** with easy selection
 - Helpful error messages with guidance
 - **Fail-fast validation** - stops when critical issues detected
+
+### 📂 **Organized Template System**
+
+- **Structured data folder** - Organized templates in `data/` subfolders
+- **Template discovery** - Automatic template listing and selection
+- **Template creation** - Guided creation of new templates
+- **Template descriptions** - Clear explanations of each template's purpose
+- **Template validation** - Ensure templates have correct structure
 
 ---
 
@@ -191,10 +199,10 @@ azmig --live \
   --lz-file landing_zones.csv \
   --auth-method azure_cli
 
-# Server validation  
+# Server validation with integrated LZ
 azmig --live \
   --operation server_validation \
-  --excel servers.xlsx \
+  --lz-file server_with_lz.csv \
   --auth-method azure_cli
 ```
 
@@ -241,7 +249,7 @@ azmig --live \
 - Before enabling replication
 - To verify server-specific requirements
 
-**Input:** Excel file with server configurations
+**Input:** CSV or JSON file with server configurations (including LZ columns)
 
 **Output:** Validation report for each server
 
@@ -258,7 +266,7 @@ azmig --live \
 - After all validations complete successfully
 - Ready to start actual migration
 
-**Input:** Excel file with validated servers
+**Input:** CSV or JSON file with validated servers
 
 **Output:** Replication status for each server
 
@@ -294,7 +302,7 @@ azmig --live \
 - When all prerequisites are met
 - Production migrations
 
-**Input:** Landing Zone file + Server Excel file
+**Input:** CSV or JSON file with servers and integrated Landing Zone configuration
 
 **Output:** Comprehensive migration report
 
@@ -513,12 +521,31 @@ Subscription ID,Migrate Project Name,Appliance Type,Appliance Name,Region,Cache 
 
 ### Server Configuration File
 
-The tool supports two Excel template formats:
+The tool supports two validation approaches:
 
-#### 1. Consolidated Template (Recommended)
-Combines both Landing Zone and Server configurations in a single Excel file.
+#### 1. Landing Zone Only Validation
+Uses CSV/JSON file with Landing Zone configurations (as current implementation).
 
-**Landing Zone Columns:**
+**Required Columns:**
+- Subscription ID (target subscription for migrated resources)
+- Migrate Project Name
+- Appliance Type (vmware/hyperv/physical)
+- Appliance Name
+- Region
+- Cache Storage Account
+- Cache Storage Resource Group (resource group containing the storage account)
+- Migrate Project Subscription (subscription containing the Azure Migrate project)
+- Migrate Resource Group (resource group containing the Azure Migrate project)
+
+**Optional Columns:**
+- Recovery Vault Name
+
+**Template:** `tests/data/standard_lz.csv` or `tests/data/standard_lz.json`
+
+#### 2. Server Validation with Integrated Landing Zone
+Uses CSV/JSON file that contains BOTH server columns AND Landing Zone columns together.
+
+**Landing Zone Columns (included):**
 - Migrate Project Subscription (subscription containing the Azure Migrate project)
 - Migrate Project Name
 - Appliance Type (vmware/hyperv/physical)
@@ -527,7 +554,7 @@ Combines both Landing Zone and Server configurations in a single Excel file.
 - Cache Storage Resource Group
 - Migrate Resource Group
 
-**Server Columns:**
+**Server Columns (included):**
 - Target Machine
 - Target Region
 - Target Subscription (target subscription for migrated resources)
@@ -541,34 +568,13 @@ Combines both Landing Zone and Server configurations in a single Excel file.
 - Source Machine
 - Recovery Vault Name
 
-**Template:** `examples/consolidated_migration_template.xlsx`
+**Template:** `tests/data/server_with_lz.csv` or `tests/data/server_with_lz.json`
 
 **Benefits:**
 - Single file contains all information needed for validation
 - Automatic Landing Zone validation before server validation
 - Eliminates need for separate Landing Zone files
 - Ensures consistency between Landing Zone and server configurations
-
-#### 2. Traditional Server Template
-Contains only server-specific configurations (requires separate Landing Zone file).
-
-**Required Columns:**
-- Target Machine
-- Target Region
-- Target Subscription
-- Target RG
-- Target VNet
-- Target Subnet
-- Target Machine SKU
-- Target Disk Type
-
-**Optional Columns:**
-- Source Machine
-- Recovery Vault Name
-
-**Template:** `examples/template_migrate_projects.csv`
-
-**Note:** When using traditional template, you must also provide a separate Landing Zone CSV/JSON file.
 
 ---
 
@@ -607,14 +613,39 @@ Select operation [1/2/3/4/5] (5):
 
 ```
 ⚙️ Validation Configuration
-Create default validation configuration? [y/n] (y):
+Select a validation template or provide a custom configuration file
+
+Available validation profiles:
+┏━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Profile                ┃ Description                                      ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ standard_validation    │ Balanced validation for most scenarios           │
+│ full_validation        │ All validations enabled (production-ready)      │
+│ quick_validation       │ Essential checks only (faster)                  │
+│ rbac_only_validation   │ Only permission checks                           │
+└────────────────────────┴──────────────────────────────────────────────────┘
+
+⚙️ Validation Templates
+
+Available Validation Templates
+┏━━━━┳━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ ID ┃ Name                 ┃ Type ┃ Description                                     ┃
+┡━━━━╇━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ 1  │ full_validation      │ YAML │ Full Production Validation Profile - All...   │
+│ 2  │ quick_validation     │ YAML │ Quick Validation Profile - Essential che...   │
+│ 3  │ rbac_only_validation │ YAML │ RBAC Only Validation Profile - Permissio...   │
+│ 4  │ standard_validation  │ YAML │ Validation configuration                       │
+└────┴──────────────────────┴──────┴─────────────────────────────────────────────────┘
+
+Select validation template [1/2/3/4/n] (1):
 ```
 
 **Options:**
-- **y** → Creates `validation_config.yaml` with defaults
-- **n** → Prompts for custom config path or skip
+- **1-4** → Uses selected validation template by ID
+- **n** → Creates new validation template
+- If `validation_config.yaml` exists in root, it's offered as default first
 
-**Next:** Validation profile selection
+**Next:** Validation profile selection (if not using template)
 
 #### 2. Validation Profile (Optional)
 
@@ -645,21 +676,28 @@ Profile [1/2/3/4/5] (1):
 
 ```
 📋 Landing Zone Configuration
-File format [csv/json] (csv):
+Select a template or provide a custom file with Landing Zone details
+
+🏗️ Landing Zone Templates
+
+Available Landing Zone Templates
+┏━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ ID ┃ Name            ┃ Type ┃ Description                         ┃
+┡━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ 1  │ standard_lz     │ CSV  │ Standard Lz Template               │
+│ 2  │ standard_lz     │ JSON │ Landing Zone configuration template │
+└────┴─────────────────┴──────┴─────────────────────────────────────┘
+
+Options:
+1-2 - Select template by ID
+n - Create new template
+
+Select template [1/2/n] (1):
 ```
 
 **Options:**
-- **csv** → Prompts for CSV file
-- **json** → Prompts for JSON file
-
-**If template exists:**
-```
-Use template file: examples/template_landing_zones.csv? [y/n] (n):
-```
-
-**Options:**
-- **y** → Uses template file
-- **n** → Prompts for custom path
+- **1-2** → Uses selected template by ID
+- **n** → Creates new template with guided setup
 
 #### 4. Export Options
 
@@ -772,25 +810,25 @@ Validating Landing Zone: MigrateProject-EastUS
 
 ## Server Validation Workflow
 
-### Auto-Detection of Template Format
+### Auto-Detection of Validation Type
 
-The tool automatically detects whether you're using:
-- **Consolidated Template**: Contains both Landing Zone and Server columns
-- **Traditional Template**: Contains only Server columns
+The tool automatically detects whether you're running:
+- **Landing Zone Only**: CSV/JSON file with only Landing Zone configurations
+- **Server with Integrated LZ**: CSV/JSON file with both Server AND Landing Zone columns
 
-### Consolidated Template Workflow
+### Server Validation with Integrated Landing Zone
 
-When using the recommended consolidated template:
+When using server validation with integrated Landing Zone configuration:
 
 #### 1. Template Detection
 ```
 📋 Server Configuration  
-Detected consolidated Excel template (Landing Zone + Servers)
+Detected server configuration with integrated Landing Zone data
 ```
 
 #### 2. Two-Phase Validation
 **Phase 1: Landing Zone Validation**
-- Extracts unique Landing Zone configurations from Excel
+- Extracts unique Landing Zone configurations from CSV/JSON
 - Validates Azure Migrate projects, appliances, storage, and quotas
 - Must pass before proceeding to server validation
 
@@ -804,9 +842,9 @@ Detected consolidated Excel template (Landing Zone + Servers)
 - Clear indication of which phase caused any failures
 - Servers are skipped if their Landing Zone validation failed
 
-### Traditional Template Workflow
+### Landing Zone Only Validation
 
-When using traditional server-only template:
+When using Landing Zone only validation:
 
 #### 1. Validation Configuration
 
@@ -815,25 +853,30 @@ Same as Landing Zone workflow - prompts for config and profile.
 #### 2. Server File Selection
 
 ```
-📋 Server Configuration
-Provide Excel file with server migration details
+� Server Configuration
+Select a server template or provide a custom file with server and Landing Zone details
 
-Common locations checked:
-  → servers.xlsx
-  → migration.xlsx
-  → data/servers.xlsx
+📋 Server Templates
 
-Use found file: servers.xlsx? [y/n] (y):
+Available Server Templates
+┏━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ ID ┃ Name            ┃ Type ┃ Description                         ┃
+┡━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ 1  │ sample_servers  │ CSV  │ Sample Servers Template            │
+│ 2  │ server_with_lz  │ CSV  │ Server With Lz Template            │
+│ 3  │ server_with_lz  │ JSON │ Server template with integrated LZ  │
+└────┴─────────────────┴──────┴─────────────────────────────────────┘
+
+Options:
+1-3 - Select template by ID
+n - Create new template
+
+Select template [1/2/3/n] (1):
 ```
 
 **Options:**
-- **y** → Uses found file
-- **n** → Prompts for custom path
-
-**If no common files found:**
-```
-Excel file path: <enter path>
-```
+- **1-3** → Uses selected template by ID
+- **n** → Creates new template with guided setup (server_only or server_with_lz)
 
 #### 3. Export & Confirmation
 
@@ -841,9 +884,9 @@ Same as Landing Zone workflow.
 
 #### 4. Validation Execution
 
-**Consolidated Template Example:**
+**Server Validation with Integrated LZ Example:**
 ```
-Running Consolidated Server Validation
+Running Server Validation with Integrated Landing Zone
 
 Step 1: Validating 2 unique Landing Zone configurations
 
@@ -871,26 +914,24 @@ Validating: WEB-SERVER-01
 Progress: 1/150 complete
 ```
 
-**Traditional Template Example:**
+**Landing Zone Only Validation Example:**
 ```
-Running Server Validation Only
+Running Landing Zone Validation Only
 
-Found 150 servers to validate
+Found 2 Landing Zone configurations to validate
 
-Validating: WEB-SERVER-01
-  Region: eastus | RG: rg-production | SKU: Standard_D4s_v3
+Validating Landing Zone: MigrateProject-EastUS
+  Region: eastus | Appliance: MigrateAppliance-VMware-EastUS (vmware)
 
-✓ Region validated
-✓ Resource group exists
-✓ VNet and subnet available
-✓ VM SKU compatible
-✓ Disk types supported
-✓ Server discovered in Azure Migrate
-✓ RBAC permissions verified
+✓ Subscription verified
+✓ Checking RBAC permissions
+✓ Validating appliance health
+✓ Checking cache storage
+✓ Verifying quota availability
 
 ✓ Overall Status: OK
 
-Progress: 1/150 complete
+Progress: 1/2 complete
 ```
 
 #### 5. Results Summary
@@ -1328,93 +1369,64 @@ User                CLI                 Validator            Azure API
 
 ---
 
-## Validation Profiles
+## Project Validation Settings
 
-Validation profiles let you quickly switch between different validation configurations.
+Azure Migration Tool uses **project-persistent validation settings** that eliminate the need for separate configuration files or profile selection.
 
-### Available Profiles
+### How It Works
 
-#### 1. **full** (Default)
-```yaml
-# All validations enabled
-# Best for: Production migrations
-# Duration: ~5-10 minutes per LZ
+1. **Project-Based Configuration**: Each migration project stores its validation settings in `project.json`
+2. **One-Time Setup**: Configure validation settings when creating or opening a project
+3. **Persistent Settings**: Settings are automatically applied to all validations within the project
+4. **Interactive Editor**: Modify settings anytime via the wizard interface
 
-landing_zone_validations:
-  access_validation: enabled
-  appliance_health: enabled
-  storage_cache: enabled
-  quota_validation: enabled
+### Available Preset Profiles
 
-server_validations:
-  all: enabled
+When creating a project, you can choose from preset validation profiles:
+
+#### **Default Profile** (Recommended)
+- All essential validations enabled
+- Balanced performance and thoroughness
+- Best for: Most migration scenarios
+- Duration: ~3-5 minutes per landing zone
+
+#### **Quick Profile** 
+- Minimal essential validations only
+- RBAC and discovery checks disabled
+- Best for: Development and testing
+- Duration: ~1-2 minutes per landing zone
+
+#### **Full Profile**
+- All validations enabled including optional checks
+- Parallel execution enabled for performance
+- Best for: Production migrations requiring comprehensive validation
+- Duration: ~5-8 minutes per landing zone
+
+### Managing Validation Settings
+
+**Via Wizard Interface:**
+```
+📋 Project Validation Settings
+✓ Using project validation settings
+   • Landing Zone validations: 4/4 enabled
+   • Server validations: 7/7 enabled
+   • Parallel execution: disabled
+   • Fail fast: disabled
+Do you want to modify validation settings for this session? [y/n]
 ```
 
-#### 2. **quick**
-```yaml
-# Essential checks only
-# Best for: Quick smoke tests
-# Duration: ~2-3 minutes per LZ
+**Interactive Settings Editor:**
+- Toggle individual validation checks
+- Apply preset profiles (Default/Quick/Full)
+- Configure global settings (parallel execution, timeouts)
+- Save changes to project automatically
 
-landing_zone_validations:
-  access_validation: enabled
-  storage_cache: enabled
+### Benefits
 
-server_validations:
-  region_validation: enabled
-  vm_sku_compatibility: enabled
-```
-
-#### 3. **rbac_only**
-```yaml
-# Only permission checks
-# Best for: Access audits
-# Duration: ~1 minute per LZ
-
-landing_zone_validations:
-  access_validation: enabled
-
-server_validations:
-  rbac_permissions_check: enabled
-```
-
-#### 4. **resource_only**
-```yaml
-# Skip RBAC, check resources
-# Best for: Resource planning
-# Duration: ~4-6 minutes per LZ
-
-landing_zone_validations:
-  appliance_health: enabled
-  storage_cache: enabled
-  quota_validation: enabled
-
-server_validations:
-  region_validation: enabled
-  resource_group_check: enabled
-  vnet_subnet_validation: enabled
-  vm_sku_compatibility: enabled
-```
-
-### Using Profiles
-
-**Interactive:**
-```
-Select validation profile [full/quick/rbac_only/resource_only/default] (full):
-```
-
-**Command Line:**
-```bash
-azmig --live \
-  --operation lz_validation \
-  --validation-profile quick \
-  --lz-file landing_zones.csv
-```
-
-**In Config File:**
-```yaml
-active_profile: quick
-```
+- **No Repetitive Configuration**: Set once per project, use everywhere
+- **Consistent Validation**: Same settings across all project operations
+- **Flexible Customization**: Easy to modify via interactive editor
+- **Project Portability**: Settings travel with the project
 
 ---
 
@@ -1424,22 +1436,36 @@ active_profile: quick
 
 | File Type | Extensions | Use Case |
 |-----------|-----------|----------|
-| Landing Zone Config | `.csv`, `.json` | Layer 1 validation |
-| Server Config | `.xlsx`, `.xls` | Layer 2 validation |
+| Landing Zone Config | `.csv`, `.json` | Landing Zone only validation |
+| Server Config with LZ | `.csv`, `.json` | Server validation with integrated LZ |
 | Validation Config | `.yaml`, `.yml` | Validation settings |
 | Export Results | `.json` | Results export |
 
 ### File Templates
 
-Templates are included in `examples/` directory:
+Templates are organized in the `data/` directory with subfolders:
 
 ```
-examples/
-├── template_landing_zones.csv    # Landing Zone CSV template
-├── template_landing_zones.json   # Landing Zone JSON template
-├── template_migrate_projects.csv # Server config template
-└── servers.xlsx                   # Server Excel template
+data/
+├── lz/                                # Landing Zone templates
+│   ├── standard_lz.csv               # Standard LZ CSV template
+│   └── standard_lz.json              # Standard LZ JSON template
+├── servers/                           # Server templates  
+│   ├── server_with_lz.csv            # Server + LZ integrated CSV
+│   ├── server_with_lz.json           # Server + LZ integrated JSON
+│   └── sample_servers.csv            # Sample server data
+└── validation_templates/              # Validation configurations
+    ├── standard_validation.yaml      # Balanced validation
+    ├── full_validation.yaml          # All validations enabled
+    ├── quick_validation.yaml         # Essential checks only
+    └── rbac_only_validation.yaml     # Permission checks only
 ```
+
+**Template Selection:**
+- When prompted for files, the system shows available templates from appropriate folders
+- Users can select existing templates by ID number or create new ones
+- New templates are automatically saved to the correct subfolder
+- Templates include helpful descriptions and sample data
 
 ---
 
@@ -1532,8 +1558,7 @@ azmig [OPTIONS]
 
 | Option | Description | Format |
 |--------|-------------|--------|
-| `--lz-file` | Landing Zone file path | CSV or JSON |
-| `--excel` | Server Excel file path | XLSX or XLS |
+| `--lz-file` | Landing Zone file path (LZ-only or Server+LZ) | CSV or JSON |
 | `--validation-config` | Validation config path | YAML |
 | `--export-json` | Export results path | JSON |
 
@@ -1554,21 +1579,20 @@ azmig [OPTIONS]
 
 ### Examples
 
-**Landing Zone validation:**
+**Landing Zone only validation:**
 ```bash
 azmig --live \
   --operation lz_validation \
-  --lz-file examples/template_landing_zones.csv \
-  --validation-profile quick \
+  --lz-file tests/data/standard_lz.csv \
+  --validation-config data/validation_templates/quick_validation.yaml \
   --auth-method azure_cli
 ```
 
-**Server validation:**
+**Server validation with integrated LZ:**
 ```bash
 azmig --live \
   --operation server_validation \
-  --excel servers.xlsx \
-  --validation-config custom_validation.yaml \
+  --lz-file tests/data/server_with_lz.csv \
   --auth-method azure_cli
 ```
 
@@ -1576,8 +1600,7 @@ azmig --live \
 ```bash
 azmig --live \
   --operation full_wizard \
-  --lz-file landing_zones.csv \
-  --excel servers.xlsx \
+  --lz-file tests/data/server_with_lz.csv \
   --export-json results.json \
   --auth-method service_principal \
   --tenant-id <tenant-id> \
@@ -1589,7 +1612,7 @@ azmig --live \
 ```bash
 azmig --mock \
   --operation lz_validation \
-  --lz-file examples/template_landing_zones.csv
+  --lz-file tests/data/standard_lz.csv
 ```
 
 ---
@@ -1650,7 +1673,7 @@ This guide covers:
 
 ✅ **5 Operation Types** - From quick validation to full migration
 ✅ **6 Authentication Methods** - Maximum flexibility for any environment  
-✅ **Consolidated Templates** - Single Excel file with both Landing Zone and Server configurations
+✅ **Two Validation Approaches** - LZ-only validation or Server validation with integrated LZ configuration
 ✅ **Two-Phase Validation** - Automatic Landing Zone validation before Server validation
 ✅ **Interactive Workflows** - Step-by-step guidance through each process
 ✅ **Visual Diagrams** - Flowcharts and sequence diagrams for clarity
@@ -1664,11 +1687,10 @@ This guide covers:
 |------|---------|
 | Create config | `azmig --create-default-config` |
 | Test offline | `azmig --mock` |
-| Validate LZ | `azmig --live --operation lz_validation --lz-file <file>` |
-| Validate servers (consolidated) | `azmig --live --operation server_validation --excel <consolidated-file>` |
-| Validate servers (traditional) | `azmig --live --operation server_validation --excel <servers-file>` |
+| Validate LZ only | `azmig --live --operation lz_validation --lz-file tests/data/standard_lz.csv` |
+| Validate servers with LZ | `azmig --live --operation server_validation --lz-file tests/data/server_with_lz.csv` |
 | Full migration | `azmig --live --operation full_wizard` |
-| Interactive mode | `azmig --live` |
+| Interactive mode (recommended) | `azmig --live` |
 
 ### Next Steps
 

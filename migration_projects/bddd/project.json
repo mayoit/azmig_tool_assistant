@@ -1,0 +1,100 @@
+{
+  "project_name": "bddd",
+  "project_path": "C:\\Users\\atef.aziz\\source\\Personal\\azmig_tool_assistant\\migration_projects\\bddd",
+  "migration_type": "new",
+  "status": "in_progress",
+  "auth_config": {
+    "auth_method": "interactive",
+    "tenant_id": "ffd682b2-afb6-4bb2-9c9f-573a10bf18be",
+    "client_id": null,
+    "subscription_id": null,
+    "created_at": "2025-10-08T14:27:52.839281"
+  },
+  "created_at": "2025-10-08T14:27:59.095396",
+  "updated_at": "2025-10-08T16:08:40.566450",
+  "description": "dddd",
+  "lz_validation_files": [],
+  "server_validation_files": [],
+  "last_lz_validation": "2025-10-08T15:32:33.577772",
+  "last_server_validation": null,
+  "lz_migrate_projects": [
+    {
+      "Migrate Project Subscription": "4bf7f595-ef2c-42f9-b4e3-f2c49b080b25",
+      "Migrate Resource Group": "p-az1-migrate04-rg",
+      "Migrate Project Name": "p-az1-migrate04",
+      "Appliance Type": "physical",
+      "Appliance Name": "p-az1-azmig02",
+      "Recovery Vault Name": "p-az1-migrate04-MigrateVault-1687674646",
+      "app_landing_zones": [
+        {
+          "Subscription ID": "4bf7f595-ef2c-42f9-b4e3-f2c49b080b25",
+          "Cache Storage Account": "migrate4bf7flsa88644",
+          "Region": "uksouth",
+          "Cache Storage Resource Group": "p-az1-migrate04-rg"
+        },
+        {
+          "Subscription ID": "b645b354-11fb-4f23-b006-856c378dd73a",
+          "Cache Storage Account": "uukstramigrate01",
+          "Region": "uksouth",
+          "Cache Storage Resource Group": "u-uks-tradevtest-migration-rg-01"
+        }
+      ]
+    }
+  ],
+  "validation_settings": {
+    "global": {
+      "fail_fast": false,
+      "parallel_execution": false,
+      "timeout_seconds": 300
+    },
+    "landing_zone": {
+      "access_validation": {
+        "enabled": true
+      },
+      "access_validation_checks": {
+        "migrate_project_rbac": {
+          "enabled": true
+        },
+        "recovery_vault_rbac": {
+          "enabled": true
+        },
+        "subscription_rbac": {
+          "enabled": true
+        }
+      },
+      "appliance_health": {
+        "enabled": true
+      },
+      "storage_cache": {
+        "enabled": true,
+        "auto_create_if_missing": false
+      },
+      "quota_validation": {
+        "enabled": true
+      }
+    },
+    "servers": {
+      "region_validation": {
+        "enabled": true
+      },
+      "resource_group_validation": {
+        "enabled": true
+      },
+      "vnet_subnet_validation": {
+        "enabled": true
+      },
+      "vm_sku_validation": {
+        "enabled": true
+      },
+      "disk_type_validation": {
+        "enabled": true
+      },
+      "discovery_validation": {
+        "enabled": true
+      },
+      "rbac_validation": {
+        "enabled": true
+      }
+    }
+  }
+}
