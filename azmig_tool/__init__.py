@@ -5,21 +5,17 @@ A comprehensive CLI tool for bulk migrating servers to Azure using Azure Migrate
 """
 
 # Core modules
-from . import constants
-from . import models
+from .core import constants, models, run_migration_tool
 from . import base
 from . import clients
 from . import config
 from . import formatters
 
-# Core functionality
-from .core import run_migration_tool
-
 # Base interfaces
 from .base import BaseValidatorInterface, BaseLandingZoneInterface
 
-# Validators
-from .validators import ServersValidator, LandingZoneValidator
+# Validators - new wrapper architecture
+from .validators.wrappers import ServersValidatorWrapper, LandingZoneValidatorWrapper
 
 # Helper utilities - NEW MODULE STRUCTURE
 from .config import (
@@ -54,9 +50,9 @@ __all__ = [
     "BaseValidatorInterface",
     "BaseLandingZoneInterface",
 
-    # Validators
-    "ServersValidator",
-    "LandingZoneValidator",
+    # Validators - new wrapper architecture
+    "ServersValidatorWrapper",
+    "LandingZoneValidatorWrapper",
 
     # Config utilities
     "ConfigParser",

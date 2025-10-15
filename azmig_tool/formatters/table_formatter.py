@@ -6,7 +6,7 @@ from rich.table import Table
 from rich import box
 from typing import List
 
-from ..models import (
+from ..core.models import (
     ProjectReadinessResult,
     ValidationStatus,
     LandingZoneValidationReport,

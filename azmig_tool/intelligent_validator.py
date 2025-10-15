@@ -9,7 +9,7 @@ from rich.table import Table
 from rich import box
 from azure.core.credentials import TokenCredential
 
-from .models import (
+from ..core.models import (
     MigrationConfig,
     MigrateProjectConfig,
     ProjectReadinessResult,
@@ -20,7 +20,7 @@ from .models import (
     AzureMigrateProject
 )
 from .base.validator_interface import BaseValidatorInterface
-from .clients.azure_migrate_client import AzureMigrateIntegration
+from ..clients.azure_migrate_client import AzureMigrateIntegration
 
 console = Console()
 

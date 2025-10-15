@@ -12,8 +12,8 @@ from rich.table import Table
 from rich.panel import Panel
 from datetime import datetime
 
-from .template_manager import TemplateManager
-from .project_manager import ProjectManager, ProjectConfig, ProjectAuthConfig, AuthMethod, ProjectStatus
+from ..management.template_manager import TemplateManager
+from ..management.project_manager import ProjectManager, ProjectConfig, ProjectAuthConfig, AuthMethod, ProjectStatus
 
 console = Console()
 

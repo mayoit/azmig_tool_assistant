@@ -9,7 +9,7 @@ from rich.prompt import Prompt, Confirm
 from rich.panel import Panel
 from rich import box
 from azure.core.credentials import TokenCredential
-from .models import (
+from ..core.models import (
     MigrationType,
     AzureMigrateProject,
     ReplicationCache,
@@ -19,15 +19,15 @@ from .models import (
     MigrationConfig,
     ValidationStatus
 )
-from .config.parsers import ConfigParser
-from .validators import ServersValidator
-from .clients.azure_migrate_client import AzureMigrateIntegration, RecoveryServicesIntegration
-from .template_manager import TemplateManager
-from .project_manager import ProjectManager, ProjectConfig, ProjectAuthConfig, AuthMethod, ProjectStatus
+from ..config.parsers import ConfigParser
+from ..validators.wrappers import ServersValidatorWrapper
+from ..clients.azure_migrate_client import AzureMigrateIntegration, RecoveryServicesIntegration
+from ..management.template_manager import TemplateManager
+from ..management.project_manager import ProjectManager, ProjectConfig, ProjectAuthConfig, AuthMethod, ProjectStatus
 from .interactive_prompts import InteractivePrompter
-from .auth import get_current_user_object_id
-from .config.validation_config import ValidationConfig, get_validation_config
-from .intelligent_validator import IntelligentServerValidator
+from ..utils.auth import get_current_user_object_id
+from ..config.validation_config import ValidationConfig, get_validation_config
+from ..validators.wrappers import IntelligentServersValidatorWrapper
 
 console = Console()
 
@@ -56,7 +56,8 @@ class MigrationWizard:
     def _initialize_azure_components(self, credential):
         """Initialize Azure components after authentication is established"""
         self.credential = credential
-        self.validator = ServersValidator(self.credential)  # type: ignore
+        validation_config = get_validation_config()
+        self.validator = ServersValidatorWrapper(self.credential, validation_config)  # type: ignore
         self.migrate_integration = AzureMigrateIntegration(
             self.credential)  # type: ignore
         self.recovery_integration = RecoveryServicesIntegration(
@@ -68,7 +69,7 @@ class MigrationWizard:
                 self.current_project.auth_config.auth_method == AuthMethod.INTERACTIVE):
 
             try:
-                from .cached_credential import CachedCredentialFactory
+                from ..utils.auth import CachedCredentialFactory
 
                 # Replace current credential with cached version
                 cached_credential = CachedCredentialFactory.create_credential(
@@ -492,22 +493,49 @@ class MigrationWizard:
         console.print("\n[cyan]Running validations...[/cyan]")
         validation_results = self.validator.validate_all(
             configs,
-            project=project,
-            user_object_id=user_oid
+            migrate_project_name=getattr(project, 'migrate_project_name', None) if project else None,
+            migrate_project_rg=getattr(project, 'migrate_resource_group', None) if project else None
         )
 
-        # Create validation reports
+        # Create validation reports from new wrapper results
         reports = []
-        for config in configs:
-            machine_results = validation_results.get(
-                config.machine_name, [])
+        for server_result in validation_results.server_results:
+            config = server_result.machine_config
+
+            # Convert server validation results to machine results format
+            machine_results = []
+            
+            # Convert individual validation results to the old format
+            result_mappings = [
+                ("Region", server_result.region_result),
+                ("Resource Group", server_result.resource_group_result), 
+                ("VNet", server_result.vnet_result),
+                ("VM SKU", server_result.vmsku_result),
+                ("Disk", server_result.disk_result),
+                ("Discovery", server_result.discovery_result),
+                ("RBAC", server_result.rbac_result)
+            ]
+            
+            for name, result in result_mappings:
+                if result and hasattr(result, 'status'):
+                    # Convert to old ValidationResult format
+                    from ..core.models import ValidationResult, ValidationStage
+                    machine_results.append(ValidationResult(
+                        stage=ValidationStage.AZURE_RESOURCES,  # Default stage
+                        passed=result.status == ValidationStatus.OK,
+                        message=getattr(result, 'message', f"{name} validation"),
+                        details=getattr(result, 'details', {}) if hasattr(result, 'details') else {}
+                    ))
 
             # Determine overall status
-            all_passed = all(r.passed for r in machine_results)
-            any_failed = any(not r.passed for r in machine_results)
-
-            overall_status = "PASSED" if all_passed else (
-                "FAILED" if any_failed else "WARNING")
+            if server_result.overall_status == ValidationStatus.OK:
+                overall_status = "PASSED"
+            elif server_result.overall_status == ValidationStatus.FAILED:
+                overall_status = "FAILED"
+            elif server_result.overall_status == ValidationStatus.WARNING:
+                overall_status = "WARNING"
+            else:
+                overall_status = "SKIPPED"
 
             report = MachineValidationReport(
                 config=config,
@@ -560,8 +588,12 @@ class MigrationWizard:
 
         # Initialize Landing Zone validator if not already done
         if not hasattr(self, 'lz_validator') or not self.lz_validator:
-            from .validators.landing_zone_validator import LandingZoneValidator
-            self.lz_validator = LandingZoneValidator(self.credential)
+            if not self.credential:
+                console.print("[red]✗[/red] Azure credentials not available for validation")
+                console.print("[yellow]⚠[/yellow] Please ensure you are authenticated to Azure")
+                return
+            from ..validators.wrappers import LandingZoneValidatorWrapper
+            self.lz_validator = LandingZoneValidatorWrapper(self.credential, validation_config)
 
         # Run Landing Zone validations
         console.print("\n[cyan]Running Landing Zone validations...[/cyan]")
@@ -645,16 +677,20 @@ class MigrationWizard:
                 try:
                     access_result = self.lz_validator.validate_access(
                         lz_config)
-                    project_results.append(access_result)
+                    
+                    if access_result:  # Only process if validation was performed
+                        project_results.append(access_result)
 
-                    if access_result.status == ValidationStatus.FAILED:
-                        console.print(
-                            f"    [red]✗[/red] {access_result.message}")
-                        validation_errors.append(
-                            f"{lz_config.migrate_project_name}: {access_result.message}")
+                        if access_result.status == ValidationStatus.FAILED:
+                            console.print(
+                                f"    [red]✗[/red] {access_result.message}")
+                            validation_errors.append(
+                                f"{lz_config.migrate_project_name}: {access_result.message}")
+                        else:
+                            console.print(
+                                f"    [green]✓[/green] {access_result.message}")
                     else:
-                        console.print(
-                            f"    [green]✓[/green] {access_result.message}")
+                        console.print("    [dim]Access validation disabled[/dim]")
 
                 except Exception as e:
                     console.print(
@@ -674,16 +710,20 @@ class MigrationWizard:
                     try:
                         appliance_result = self.lz_validator.validate_appliance_health(
                             lz_config)
-                        project_results.append(appliance_result)
+                        
+                        if appliance_result:  # Only process if validation was performed
+                            project_results.append(appliance_result)
 
-                        if appliance_result.status == ValidationStatus.FAILED:
-                            console.print(
-                                f"    [red]✗[/red] {appliance_result.message}")
-                            validation_errors.append(
-                                f"{lz_config.migrate_project_name}: {appliance_result.message}")
+                            if appliance_result.status == ValidationStatus.FAILED:
+                                console.print(
+                                    f"    [red]✗[/red] {appliance_result.message}")
+                                validation_errors.append(
+                                    f"{lz_config.migrate_project_name}: {appliance_result.message}")
+                            else:
+                                console.print(
+                                    f"    [green]✓[/green] {appliance_result.message}")
                         else:
-                            console.print(
-                                f"    [green]✓[/green] {appliance_result.message}")
+                            console.print("    [dim]Appliance health validation disabled[/dim]")
 
                     except Exception as e:
                         console.print(
@@ -703,16 +743,20 @@ class MigrationWizard:
                     try:
                         storage_result = self.lz_validator.validate_storage_cache(
                             lz_config)
-                        project_results.append(storage_result)
+                        
+                        if storage_result:  # Only process if validation was performed
+                            project_results.append(storage_result)
 
-                        if storage_result.status == ValidationStatus.FAILED:
-                            console.print(
-                                f"    [red]✗[/red] {storage_result.message}")
-                            validation_errors.append(
-                                f"{lz_config.migrate_project_name}: {storage_result.message}")
+                            if storage_result.status == ValidationStatus.FAILED:
+                                console.print(
+                                    f"    [red]✗[/red] {storage_result.message}")
+                                validation_errors.append(
+                                    f"{lz_config.migrate_project_name}: {storage_result.message}")
+                            else:
+                                console.print(
+                                    f"    [green]✓[/green] {storage_result.message}")
                         else:
-                            console.print(
-                                f"    [green]✓[/green] {storage_result.message}")
+                            console.print("    [dim]Storage cache validation disabled[/dim]")
 
                     except Exception as e:
                         console.print(
@@ -725,16 +769,20 @@ class MigrationWizard:
                 console.print("  • Checking quotas...")
                 try:
                     quota_result = self.lz_validator.validate_quota(lz_config)
-                    project_results.append(quota_result)
+                    
+                    if quota_result:  # Only process if validation was performed
+                        project_results.append(quota_result)
 
-                    if quota_result.status == ValidationStatus.FAILED:
-                        console.print(
-                            f"    [red]✗[/red] {quota_result.message}")
-                        validation_errors.append(
-                            f"{lz_config.migrate_project_name}: {quota_result.message}")
+                        if quota_result.status == ValidationStatus.FAILED:
+                            console.print(
+                                f"    [red]✗[/red] {quota_result.message}")
+                            validation_errors.append(
+                                f"{lz_config.migrate_project_name}: {quota_result.message}")
+                        else:
+                            console.print(
+                                f"    [green]✓[/green] {quota_result.message}")
                     else:
-                        console.print(
-                            f"    [green]✓[/green] {quota_result.message}")
+                        console.print("    [dim]Quota validation disabled[/dim]")
 
                 except Exception as e:
                     console.print(
@@ -915,7 +963,7 @@ class MigrationWizard:
                     "[bold cyan]📋 Project Validation Settings[/bold cyan]")
 
                 # Create ValidationConfig from project's validation_settings
-                from .config.validation_config import ValidationConfig
+                from ..config.validation_config import ValidationConfig
                 global_validation_config = ValidationConfig(
                     config_data=self.current_project.validation_settings.to_dict()
                 )
@@ -958,7 +1006,7 @@ class MigrationWizard:
                         "\n[bold cyan]📋 Project Validation Settings[/bold cyan]")
 
                     # Create ValidationConfig from project's validation_settings
-                    from .config.validation_config import ValidationConfig
+                    from ..config.validation_config import ValidationConfig
                     global_validation_config = ValidationConfig(
                         config_data=self.current_project.validation_settings.to_dict()
                     )
@@ -993,8 +1041,7 @@ class MigrationWizard:
                 self._initialize_azure_components(self._credential)
             else:
                 # Initialize credential based on project auth config with cached token support
-                from .cached_credential import CachedCredentialFactory
-                from .auth import get_current_tenant_id
+                from ..utils.auth import CachedCredentialFactory, get_current_tenant_id
                 credential = CachedCredentialFactory.create_credential(
                     self.current_project.auth_config,
                     self.project_manager,
@@ -1143,10 +1190,11 @@ class MigrationWizard:
         replication_results = []
 
         try:
-            # Initialize intelligent validator if we have a base validator
-            if self.validator:
-                intelligent_validator = IntelligentServerValidator(
-                    self.validator, credential=self.credential)
+            # Initialize intelligent validator if we have credentials
+            if self.credential:
+                from ..config.validation_config import get_validation_config
+                intelligent_validator = IntelligentServersValidatorWrapper(
+                    self.credential, get_validation_config())
 
                 # Load landing zone project data from saved project configurations
                 landing_zone_projects = []
@@ -1160,7 +1208,7 @@ class MigrationWizard:
                         self.current_project)
 
                     if lz_configs and "migrate_projects" in lz_configs:
-                        from .models import MigrateProjectConfig
+                        from ..core.models import MigrateProjectConfig
 
                         for mp_data in lz_configs["migrate_projects"]:
                             # Convert saved data to MigrateProjectConfig objects
@@ -1240,11 +1288,11 @@ class MigrationWizard:
                     f"[cyan]🧠 Running intelligent validation for {len(server_configs)} servers...[/cyan]")
 
                 # Run intelligent validation
-                reports = intelligent_validator.intelligent_validate_all(
+                report = intelligent_validator.intelligent_validate_all_servers(
                     server_configs)
 
                 console.print(
-                    f"\n[green]✅ Intelligent validation completed for {len(reports)} machines[/green]")
+                    f"\n[green]✅ Intelligent validation completed for {report.total_servers} machines[/green]")
 
             else:
                 console.print(
@@ -1414,8 +1462,12 @@ class MigrationWizard:
 
     def _prompt_validation_settings_editor(self):
         """Interactive editor for validation settings"""
-        from .project_manager import ValidationSettings
+        from ..management.project_manager import ValidationSettings
 
+        if not self.current_project:
+            console.print("[red]Error: No current project available for settings editor[/red]")
+            return
+            
         settings = self.current_project.validation_settings
         console.print("\n[bold cyan]🔧 Validation Settings Editor[/bold cyan]")
         console.print(
@@ -1487,6 +1539,8 @@ class MigrationWizard:
                     "[yellow]Exiting without saving changes[/yellow]")
                 break
             elif choice == "s":
+                # current_project is guaranteed to be non-None due to check at method start
+                assert self.current_project is not None
                 self.project_manager.update_validation_settings(
                     self.current_project, settings)
                 console.print(

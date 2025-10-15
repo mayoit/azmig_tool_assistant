@@ -6,7 +6,7 @@ This interface defines the contract for Azure Migrate project readiness validati
 
 from abc import ABC, abstractmethod
 from typing import Optional
-from ..models import (
+from ..core.models import (
     MigrateProjectConfig,
     AccessValidationResult,
     ApplianceHealthResult,

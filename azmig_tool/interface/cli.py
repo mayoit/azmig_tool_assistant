@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 import argparse
+import sys
 from rich.console import Console
 
-from .core import run_migration_tool
+from ..core.core import run_migration_tool
+from ..utils.exit_codes import ExitManager, ExitCode
 
 console = Console()
 
@@ -114,35 +116,53 @@ def main():
 
         # Validate required parameters for non-interactive mode
         if not params['auth_method']:
-            console.print(
-                "[red]✗[/red] --auth-method required in non-interactive mode")
-            return
+            ExitManager.exit_with_code(
+                ExitCode.INVALID_ARGUMENTS,
+                "--auth-method required in non-interactive mode",
+                "Specify authentication method: azure_cli, managed_identity, service_principal, interactive, or default"
+            )
 
         if not params['operation']:
-            console.print(
-                "[red]✗[/red] --operation required in non-interactive mode")
-            return
+            ExitManager.exit_with_code(
+                ExitCode.INVALID_ARGUMENTS,
+                "--operation required in non-interactive mode",
+                "Specify operation: lz_validation, server_validation, replication, or full_wizard"
+            )
 
     # Handle configure_validations operation
     if params.get('operation') == 'configure_validations':
         console.print("\n[green]✓[/green] Validation configuration complete!")
         return
 
-    # Always run with Azure integration
-    run_migration_tool(
-        excel_path=params.get('excel'),
-        export_json=params.get('export_json'),
-        validation_config_path=params.get('validation_config'),
-        validation_profile=params.get('validation_profile'),
-        auth_method=params.get('auth_method'),
-        tenant_id=params.get('tenant_id'),
-        client_id=params.get('client_id'),
-        client_secret=params.get('client_secret'),
-        operation=params.get('operation'),
-        lz_file=params.get('lz_file'),
-        project_name=params.get('project_name'),
-        project_folder=params.get('project_folder')
-    )
+    # Always run with Azure integration with proper error handling
+    try:
+        run_migration_tool(
+            excel_path=params.get('excel'),
+            export_json=params.get('export_json'),
+            validation_config_path=params.get('validation_config'),
+            validation_profile=params.get('validation_profile'),
+            auth_method=params.get('auth_method'),
+            tenant_id=params.get('tenant_id'),
+            client_id=params.get('client_id'),
+            client_secret=params.get('client_secret'),
+            operation=params.get('operation'),
+            lz_file=params.get('lz_file'),
+            project_name=params.get('project_name'),
+            project_folder=params.get('project_folder')
+        )
+        # If we get here, operation completed successfully
+        sys.exit(ExitCode.SUCCESS.value)
+        
+    except KeyboardInterrupt:
+        ExitManager.handle_keyboard_interrupt()
+    except FileNotFoundError as e:
+        ExitManager.exit_with_code(
+            ExitCode.FILE_NOT_FOUND,
+            f"Required file not found: {str(e)}",
+            "Check file paths and ensure all required files exist"
+        )
+    except Exception as e:
+        ExitManager.handle_critical_error(e, "CLI execution")
 
 
 if __name__ == '__main__':

@@ -492,5 +492,145 @@ class LandingZoneValidationReport:
         }
 
 
+@dataclass
+class MachineConfig:
+    """Configuration for individual machine validation (alias for MigrationConfig)"""
+    target_machine_name: str
+    target_region: str  
+    target_subscription: str
+    target_rg: str
+    target_vnet: str
+    target_subnet: str
+    target_machine_sku: str
+    target_disk_type: str
+
+
+@dataclass 
+class RegionValidationResult:
+    """Result of region validation"""
+    machine_name: str
+    region: str
+    subscription_id: str
+    status: ValidationStatus
+    is_available: bool
+    services_available: bool
+    sku_available: Optional[bool]
+    message: str
+    available_regions: List[str] = field(default_factory=list)
+
+
+@dataclass
+class ResourceGroupValidationResult:
+    """Result of resource group validation"""
+    machine_name: str
+    resource_group: str
+    subscription_id: str
+    status: ValidationStatus
+    exists: bool
+    has_required_permissions: bool
+    region_match: bool
+    follows_naming_convention: bool
+    message: str
+    suggested_action: Optional[str] = None
+
+
+@dataclass
+class SubnetInfo:
+    """Subnet information"""
+    name: str
+    address_prefix: str
+    available_ips: int
+    has_nsg: bool
+    has_route_table: bool
+
+
+@dataclass
+class VNetValidationResult:
+    """Result of VNet validation"""
+    machine_name: str
+    vnet_name: str
+    subnet_name: str
+    resource_group: str
+    subscription_id: str
+    status: ValidationStatus
+    vnet_exists: bool
+    subnet_exists: bool
+    subnet_info: Optional[SubnetInfo]
+    region_match: bool
+    has_nsg: bool
+    message: str
+    suggested_action: Optional[str] = None
+
+
+@dataclass
+class VMSkuInfo:
+    """VM SKU information"""
+    name: str
+    vcpus: int
+    memory_mb: int
+    max_data_disks: int
+    temp_disk_size_mb: int
+
+
+@dataclass
+class VMSkuValidationResult:
+    """Result of VM SKU validation"""
+    machine_name: str
+    target_sku: str
+    region: str
+    subscription_id: str
+    status: ValidationStatus
+    is_available: bool
+    sku_info: Optional[VMSkuInfo]
+    supports_premium_storage: bool
+    supports_nested_virtualization: bool
+    message: str
+    suggested_skus: List[str] = field(default_factory=list)
+    cost_optimization_notes: List[str] = field(default_factory=list)
+
+
+@dataclass
+class DiskValidationResult:
+    """Result of disk validation"""
+    machine_name: str
+    target_disk_type: str
+    region: str
+    subscription_id: str
+    status: ValidationStatus
+    is_supported: bool
+    is_available_in_region: bool
+    performance_tier: Optional[str]
+    message: str
+    alternative_disk_types: List[str] = field(default_factory=list)
+
+
+@dataclass
+class DiscoveryValidationResult:
+    """Result of discovery validation"""
+    machine_name: str
+    migrate_project: str
+    subscription_id: str
+    status: ValidationStatus
+    is_discovered: bool
+    message: str
+    last_heartbeat: Optional[str] = None
+    discovery_status: Optional[str] = None
+    suggested_action: Optional[str] = None
+
+
+@dataclass
+class RbacValidationResult:
+    """Result of RBAC validation"""
+    machine_name: str
+    resource_scope: str
+    subscription_id: str
+    status: ValidationStatus
+    has_required_permissions: bool
+    message: str
+    missing_permissions: List[str] = field(default_factory=list)
+    current_roles: List[str] = field(default_factory=list)
+    suggested_action: Optional[str] = None
+
+
 # Backward compatibility alias
 Layer1ValidationReport = LandingZoneValidationReport

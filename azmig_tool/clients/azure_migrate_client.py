@@ -5,7 +5,7 @@ from typing import List, Optional, Dict
 from azure.core.credentials import TokenCredential
 from azure.core.exceptions import HttpResponseError, ResourceNotFoundError
 from rich.console import Console
-from ..models import (
+from ..core.models import (
     MigrationConfig,
     ValidationResult,
     ValidationStage,
@@ -13,7 +13,7 @@ from ..models import (
     ReplicationCache
 )
 from .azure_client import AzureMigrateApiClient
-from ..constants import AZURE_ROLE_IDS
+from ..core.constants import AZURE_ROLE_IDS
 
 console = Console()
 

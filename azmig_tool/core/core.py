@@ -7,14 +7,15 @@ from rich.console import Console
 from rich.table import Table
 from rich import box
 from rich.panel import Panel
-from .wizard import MigrationWizard
-from .config.validation_config import get_validation_config, reset_validation_config
-from .auth import get_azure_credential
-from .config.parsers import ConfigParser
-from .validators.landing_zone_validator import LandingZoneValidator
-from .models import MigrateProjectConfig, ValidationStatus
-from .project_manager import ProjectManager, ProjectConfig, ProjectAuthConfig, AuthMethod
-from .interactive_prompts import InteractivePrompter
+from ..interface.wizard import MigrationWizard
+from ..config.validation_config import get_validation_config, reset_validation_config
+from ..utils.auth import get_azure_credential
+from ..config.parsers import ConfigParser
+from ..validators.wrappers import LandingZoneValidatorWrapper
+from ..core.models import MigrateProjectConfig, ValidationStatus
+from ..management.project_manager import ProjectManager, ProjectConfig, ProjectAuthConfig, AuthMethod
+from ..interface.interactive_prompts import InteractivePrompter
+from ..utils.exit_codes import ExitManager, ExitCode, validate_exit_on_failure
 import json
 from datetime import datetime
 
@@ -77,7 +78,7 @@ def run_migration_tool(
 
             # Use saved authentication from project with token caching
             try:
-                from .cached_credential import CachedCredentialFactory
+                from ..utils.auth import CachedCredentialFactory
                 credential = CachedCredentialFactory.create_credential(
                     project.auth_config,
                     project_manager,
@@ -107,10 +108,11 @@ def run_migration_tool(
                 client_secret=client_secret
             )
         except Exception as e:
-            console.print(f"[red]✗ Authentication failed: {e}[/red]")
-            console.print(
-                "[yellow]Please check your credentials and try again[/yellow]")
-            return
+            ExitManager.exit_with_code(
+                ExitCode.AUTH_FAILED,
+                f"Authentication failed: {str(e)}",
+                "Check credentials and authentication method"
+            )
     else:
         # credential was already set above when using saved project auth
         pass
@@ -124,9 +126,14 @@ def run_migration_tool(
 
             # Apply profile if specified
             if validation_profile and validation_profile != "default":
-                config._apply_profile(validation_profile)
-                console.print(
-                    f"[cyan]Using validation profile:[/cyan] {validation_profile}\n")
+                if config.apply_profile(validation_profile):
+                    console.print(
+                        f"[green]✓[/green] Applied validation profile: {validation_profile}\n")
+                else:
+                    console.print(
+                        f"[yellow]⚠[/yellow] Profile '{validation_profile}' not found in config file")
+                    console.print(
+                        "[yellow]Continuing with default validation settings[/yellow]\n")
         except FileNotFoundError:
             console.print(
                 f"[yellow]Warning: Validation config file not found: {validation_config_path}[/yellow]")
@@ -137,9 +144,14 @@ def run_migration_tool(
         try:
             reset_validation_config()
             config = get_validation_config(None)
-            config._apply_profile(validation_profile)
-            console.print(
-                f"[cyan]Using validation profile:[/cyan] {validation_profile}\n")
+            if config.apply_profile(validation_profile):
+                console.print(
+                    f"[green]✓[/green] Applied validation profile: {validation_profile}\n")
+            else:
+                console.print(
+                    f"[yellow]⚠[/yellow] Profile '{validation_profile}' not found in default config")
+                console.print(
+                    "[yellow]Continuing with default validation settings[/yellow]\n")
         except FileNotFoundError:
             console.print(
                 "[yellow]Warning: No validation config file found[/yellow]")
@@ -189,21 +201,24 @@ def run_landing_zone_validation(lz_file: str, credential, validation_config_path
     """
     # Load validation config
     validation_config = get_validation_config(
-        validation_config_path) if validation_config_path else None
+        validation_config_path) if validation_config_path else get_validation_config()
 
     # Parse Landing Zone file
     parser = ConfigParser(config_path=lz_file)
     success, landing_zones, error_msg = parser.parse_landing_zone()
 
     if not success:
-        console.print(f"\n[red]Error:[/red] {error_msg}")
-        return
+        ExitManager.exit_with_code(
+            ExitCode.CONFIG_FILE_ERROR,
+            f"Landing zone file parsing failed: {error_msg}",
+            f"Check file format and required columns in: {lz_file}"
+        )
 
     console.print(
         f"\n[cyan]Found {len(landing_zones)} Landing Zone(s) to validate[/cyan]\n")
 
     # Create validator
-    validator = LandingZoneValidator(
+    validator = LandingZoneValidatorWrapper(
         credential=credential, validation_config=validation_config)
 
     # Validate each Landing Zone
@@ -214,7 +229,7 @@ def run_landing_zone_validation(lz_file: str, credential, validation_config_path
         console.print(
             f"  Region: {lz.region} | Appliance: {lz.appliance_name} ({lz.appliance_type})\n")
 
-        result = validator.validate_project(lz)
+        result = validator.validate_single(lz)
         results.append((lz, result))
 
         # Display result
@@ -315,6 +330,19 @@ def _display_lz_summary(results: List[tuple]):
     else:
         console.print(
             f"[yellow]⚠ {failed} Landing Zone(s) failed validation[/yellow]\n")
+        # Exit with appropriate code based on validation results
+        if failed == total:
+            ExitManager.exit_with_code(
+                ExitCode.ALL_VALIDATIONS_FAILED,
+                "All Landing Zone validations failed",
+                "Review validation details above and fix configuration issues"
+            )
+        else:
+            ExitManager.exit_with_code(
+                ExitCode.LANDING_ZONE_FAILED,
+                f"{failed} of {total} Landing Zone validations failed", 
+                "Some Landing Zones need attention before proceeding"
+            )
 
 
 def _export_lz_results(results: List[tuple], export_path: str):

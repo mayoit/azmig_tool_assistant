@@ -1,340 +1,355 @@
-# 🛠️ Azure Bulk Migration Tool
+# Azure Migration Tool 🚀
 
-[![Python 3.8+](https://img.shields.io/badge/## 📖 Docu## 📖 D---
+A comprehensive Python CLI tool for bulk server migration from on-premises to Azure using Azure Migrate and Site Recovery. Features live Azure integration with intelligent validation and project matching.
 
-## 📖 Documentation
+## ✨ Features
 
-| Document | Description |
-|----------|-------------|
-| **[USER_GUIDE.md](docs/USER_GUIDE.md)** 🌟 | **Complete guide with features, workflows, and diagrams - START HERE** |
-| **[INSTALLATION.md](docs/INSTALLATION.md)** | Complete installation guide with troubleshooting |
-| **[QUICK_REFERENCE.md](docs/QUICK_REFERENCE.md)** 📋 | Command quick reference |
-| **[DOCUMENTATION_SUMMARY.md](docs/DOCUMENTATION_SUMMARY.md)** | Overview of all documentation |
-| **[ROADMAP.md](docs/ROADMAP.md)** | Future enhancements and development roadmap |
+- **🏗️ Two-Layer Validation**: Landing Zone (project-level) and Servers (machine-level) validation
+- **🧠 Intelligent Validation**: Automatic server-to-project matching with discovery integration
+- **☁️ Live Azure Integration**: Real-time validation against Azure APIs
+- **📊 Rich Reporting**: Comprehensive validation results with detailed insights
+- **⚙️ Configuration-Driven**: Flexible validation profiles and customizable rules
+- **🔒 Secure Authentication**: Multiple auth methods (Azure CLI, Service Principal, Managed Identity)
+- **📈 Progress Tracking**: Real-time validation progress with detailed status updates
+- **🔄 Retry Logic**: Intelligent retry mechanisms for Azure API calls
 
----| Document | Description |
-|----------|-------------|
-| **[INTERACTIVE_GUIDE.md](docs/INTERACTIVE_GUIDE.md)** 🌟 | **NEW:** Step-by-step interactive wizard guide |
-| **[QUICK_REFERENCE.md](docs/QUICK_REFERENCE.md)** 📋 | **NEW:** Quick reference for prompts, options, and workflows |
-| **[SEQUENCE_DIAGRAM.md](docs/SEQUENCE_DIAGRAM.md)** 📊 | **NEW:** Complete sequence diagrams for all flows |
-| **[FLOWCHART.md](docs/FLOWCHART.md)** 🔄 | **NEW:** Mermaid flowcharts for visual reference |
-| **[INSTALLATION.md](docs/INSTALLATION.md)** | Complete installation guide with troubleshooting |
-| **[FEATURES.md](docs/FEATURES.md)** | Comprehensive feature documentation and validation configuration |
-| **[ARCHITECTURE.md](ARCHITECTURE.md)** | Technical architecture and design patterns |
-| **[ROADMAP.md](docs/ROADMAP.md)** | Future enhancements and development roadmap |n
+## 📋 Requirements
 
-| Document | Description |
-|----------|-------------|
-| **[INTERACTIVE_GUIDE.md](docs/INTERACTIVE_GUIDE.md)** 🌟 | **NEW:** Step-by-step interactive wizard guide |
-| **[INSTALLATION.md](docs/INSTALLATION.md)** | Complete installation guide with troubleshooting |
-| **[FEATURES.md](docs/FEATURES.md)** | Comprehensive feature documentation and validation configuration |
-| **[ARCHITECTURE.md](ARCHITECTURE.md)** | Technical architecture and design patterns |
-| **[ROADMAP.md](docs/ROADMAP.md)** | Future enhancements and development roadmap |.8+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-3.0.0-green.svg)](https://github.com/atef-aziz/azmig_tool)
-
-A comprehensive CLI tool for **bulk migrating servers from on-premises data centers to Azure** using Azure Migrate and Azure Site Recovery.
-
-## ✨ Key Features
-
-- 🎯 **Interactive Wizard** 🌟 **NEW** - Guided step-by-step workflow with smart prompts
-- 🎯 **Two-Layer Validation** - Landing Zone (project-level) + Servers (machine-level)
-- ⚙️ **Configurable Validations** - YAML-based configuration with profiles
-- 🔐 **Flexible Authentication** - 6 authentication methods (Azure CLI, Managed Identity, Service Principal, etc.)
-- 📊 **Excel-Based Configuration** - Simple spreadsheet format
-- 🧙 **Operation Modes** - Landing Zone validation, Server validation, Replication, or Full wizard
-- ☁️ **Azure Integration** - Real-time validation with Azure APIs
-- 📦 **Batch Processing** - Validate multiple servers simultaneously
-- 🎨 **Rich CLI Interface** - Color-coded output with progress indicators
-
----
+- **Python**: 3.9 or higher
+- **Azure Access**: Valid Azure credentials with appropriate permissions
+- **Network**: Outbound HTTPS access to Azure APIs
+- **Permissions**: Minimum Reader on subscription, Contributor on target resources
 
 ## 🚀 Quick Start
 
 ### Installation
 
 ```bash
-# Clone repository
-git clone https://github.com/atef-aziz/azmig_tool.git
-cd azmig_tool_package
+# Clone the repository
+git clone https://github.com/your-org/azmig_tool_assistant.git
+cd azmig_tool_assistant
 
 # Create virtual environment
 python -m venv .venv
 .venv\Scripts\activate  # Windows
-# source .venv/bin/activate  # Linux/Mac
+source .venv/bin/activate  # Linux/Mac
 
-# Install
+# Install dependencies
 pip install -r requirements.txt
+
+# Install the tool
 pip install -e .
 ```
 
-**📖 Detailed instructions:** [INSTALLATION.md](docs/INSTALLATION.md)
-
 ### Basic Usage
 
-**🌟 Interactive Wizard (Simplest)**
 ```bash
-# Just run the tool - it guides you through everything!
+# Interactive wizard (recommended for first-time users)
 azmig
+
+# Direct validation with Excel file
+azmig validate --excel-file migration_servers.xlsx
+
+# Landing zone validation with CSV
+azmig validate --csv-file migrate_projects.csv --type landing-zone
+
+# Use specific validation profile
+azmig validate --excel-file servers.xlsx --profile quick
 ```
 
-The wizard interactively prompts for:
-- ✓ Authentication method
-- ✓ Operation type (validation, replication, etc.)
-- ✓ File paths (Excel, CSV, JSON)
-- ✓ Validation configuration
-- ✓ Export options
+## 📝 Input File Formats
 
-**Traditional CLI (Advanced)**
+### Landing Zone Configuration (CSV/JSON)
+Required fields for Azure Migrate project validation:
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| migrate_project_name | Azure Migrate project name | `MyMigrationProject` |
+| migrate_resource_group | Resource group containing project | `rg-migration` |
+| migrate_project_subscription | Subscription ID | `12345678-1234-5678-9012-123456789012` |
+| region | Target Azure region | `East US` |
+| appliance_name | Azure Migrate appliance name | `MigrationAppliance01` |
+
+### Server Configuration (Excel)
+Required columns for machine-level validation:
+
+| Column | Description | Example |
+|--------|-------------|---------|
+| Target Machine Name | Server name in target environment | `web-server-01` |
+| Target Region | Target Azure region | `East US` |
+| Target Subscription | Target subscription ID | `12345678-1234-5678-9012-123456789012` |
+| Target RG | Target resource group | `rg-production` |
+| Target Vnet | Target virtual network | `vnet-prod` |
+| Target Subnet | Target subnet | `subnet-web` |
+| Target Machine Sku | Target VM SKU | `Standard_D4s_v3` |
+| Target Disk Type | Target disk type | `Premium_LRS` |
+
+## 🔧 Configuration
+
+### Validation Configuration (`validation_config.yaml`)
+
+```yaml
+# Active validation profile
+active_profile: "default"
+
+# Global settings
+global:
+  fail_fast: false           # Stop on first validation failure
+  parallel_execution: true   # Run validations concurrently
+  timeout_seconds: 300      # API call timeout
+
+# Landing zone validations
+landing_zone:
+  access_validation:
+    enabled: true
+    checks:
+      migrate_project_rbac: {enabled: true}
+      recovery_vault_rbac: {enabled: true}
+  appliance_health: {enabled: true}
+  storage_cache: {enabled: true, auto_create_if_missing: false}
+  quota_validation: {enabled: true}
+
+# Server validations  
+servers:
+  region_validation: {enabled: true}
+  resource_group_validation: {enabled: true}
+  vnet_subnet_validation: {enabled: true}
+  vm_sku_validation: {enabled: true}
+  disk_type_validation: {enabled: true}
+  discovery_validation: {enabled: true}
+  rbac_validation: {enabled: true}
+
+# Validation profiles
+profiles:
+  quick:
+    overrides:
+      servers.rbac_validation.enabled: false
+      servers.discovery_validation.enabled: false
+  
+  full:
+    # All validations enabled (default)
+    
+  rbac_only:
+    overrides:
+      servers.region_validation.enabled: false
+      servers.vnet_subnet_validation.enabled: false
+```
+
+## 🔐 Authentication
+
+### Azure CLI Authentication (Recommended)
 ```bash
-# Run with Azure authentication
+# Login with Azure CLI
 az login
-azmig --auth-method azure_cli \
-      --operation server_validation \
-      --excel migration.xlsx \
-      --validation-profile full
+
+# Verify access
+az account show
+
+# Run validation
+azmig validate --excel-file servers.xlsx
 ```
 
-**📖 Complete interactive guide:** [INTERACTIVE_GUIDE.md](docs/INTERACTIVE_GUIDE.md)
-
----
-
-## � Documentation
-
-| Document | Description |
-|----------|-------------|
-| **[INSTALLATION.md](docs/INSTALLATION.md)** | Complete installation guide with troubleshooting |
-| **[FEATURES.md](docs/FEATURES.md)** | Comprehensive feature documentation and validation configuration |
-| **[ARCHITECTURE.md](ARCHITECTURE.md)** | Technical architecture and design patterns |
-| **[ROADMAP.md](docs/ROADMAP.md)** | Future enhancements and development roadmap |
-
----
-
-## 🎯 Key Capabilities
-
-### Two-Layer Validation
-
-**Landing Zone (Project-Level):**
-- ✓ RBAC permissions (Migrate Project, Recovery Vault, Subscription)
-- ✓ Appliance health and connectivity
-- ✓ Cache storage account
-- ✓ vCPU quota availability
-
-**Servers (Machine-Level):**
-- ✓ Azure region validation
-- ✓ Resource group existence
-- ✓ VNet/Subnet configuration
-- ✓ VM SKU availability
-- ✓ Disk type compatibility
-- ✓ Azure Migrate discovery status
-- ✓ RBAC permissions on target resources
-
-### Validation Profiles
-
-| Profile | Description | Use Case |
-|---------|-------------|----------|
-| `full` | All validations enabled | Production migrations |
-| `quick` | Fast validation, skip time-consuming checks | Development/testing |
-| `rbac_only` | Permission checks only | Access verification |
-| `resource_only` | Infrastructure checks only | Resource readiness |
-
-**📖 Learn more:** [FEATURES.md - Validation Profiles](docs/FEATURES.md#validation-profiles)
-
----
-
-## 💻 CLI Options
-
-### Interactive Mode (Recommended)
-
+### Service Principal Authentication
 ```bash
-# Start interactive wizard
-azmig                 # Interactive mode with prompts
+# Set environment variables
+export AZURE_CLIENT_ID="your-client-id"
+export AZURE_CLIENT_SECRET="your-client-secret"
+export AZURE_TENANT_ID="your-tenant-id"
+
+# Run validation
+azmig validate --excel-file servers.xlsx --auth-method service_principal
 ```
 
-### Traditional CLI Mode
-
+### Managed Identity Authentication (Azure VMs)
 ```bash
-azmig [OPTIONS]
-
-Core Options:
-  --non-interactive         Disable prompts (requires all parameters)
-
-Operation Options:
-  --operation TYPE          Operation type:
-                           - lz_validation: Landing Zone validation only
-                           - server_validation: Server validation only  
-                           - replication: Enable replication
-                           - configure_validations: Interactive config editor
-                           - full_wizard: Complete workflow (default)
-
-Authentication:
-  --auth-method METHOD      azure_cli | managed_identity | service_principal |
-                           interactive | device_code | default
-  --tenant-id ID           Azure tenant ID
-  --client-id ID           Client/application ID  
-  --client-secret SECRET   Client secret
-
-Files:
-  --excel PATH             Path to Excel mapping file
-  --lz-file PATH           Path to Landing Zone CSV/JSON file
-  --validation-config PATH Path to validation YAML
-  --validation-profile NAME Validation profile (quick|full|rbac_only|resource_only)
-
-Output:
-  --export-json PATH       Export results to JSON
-  --create-default-config  Create default validation_config.yaml
-
-Help:
-  -h, --help               Show help message
+# On Azure VM with managed identity
+azmig validate --excel-file servers.xlsx --auth-method managed_identity
 ```
 
-**📖 See examples:** [INTERACTIVE_GUIDE.md](docs/INTERACTIVE_GUIDE.md)
+## 📊 Sample Output
 
----
+### Landing Zone Validation Results
+```
+🏗️ Landing Zone Validation Summary
+┌─────────────────────┬────────┬────────────────────────┐
+│ Project Name        │ Status │ Issues                 │
+├─────────────────────┼────────┼────────────────────────┤
+│ MigrationProject01  │ ✅ Ready│ 0 issues              │
+│ MigrationProject02  │ ⚠️ Issues│ Missing cache storage │
+│ MigrationProject03  │ ❌ Failed│ Insufficient quotas   │
+└─────────────────────┴────────┴────────────────────────┘
+```
 
-## 📋 Excel Configuration
+### Server Validation Results
+```
+🖥️ Servers Validation Summary  
+┌─────────────────┬──────────────┬─────────────┬────────┐
+│ Machine Name    │ Target Region│ Validations │ Status │
+├─────────────────┼──────────────┼─────────────┼────────┤
+│ web-server-01   │ East US      │ 7✅ 0❌    │ ✅ Ready│
+│ app-server-02   │ West US 2    │ 6✅ 1❌    │ ⚠️ Issues│
+│ db-server-03    │ Central US   │ 4✅ 3❌    │ ❌ Failed│
+└─────────────────┴──────────────┴─────────────┴────────┘
+```
 
-**Required Columns:**
-- `target_machine_name` - Azure VM name
-- `target_region` - Azure region (e.g., `eastus`)
-- `target_subscription` - Subscription ID
-- `target_rg` - Resource group name
-- `target_vnet` - Virtual network name
-- `target_subnet` - Subnet name
-- `target_machine_sku` - VM SKU (e.g., `Standard_D4s_v3`)
-- `target_disk_type` - Disk type (e.g., `Premium_LRS`)
+### Intelligent Validation Results
+```
+🧠 Intelligent Validation Summary
+┌─────────────────────┬───────┬────────┐
+│ Metric              │ Count │ Status │
+├─────────────────────┼───────┼────────┤
+│ Total Servers       │     5 │        │
+│ Project Matches     │     4 │ 4/5    │
+│ Discovered Machines │     3 │ 3/5    │  
+│ Migration Ready     │     3 │ 3/5    │
+└─────────────────────┴───────┴────────┘
+```
 
-**Sample Template:**
+## 🎯 Validation Types
 
-| target_machine_name | target_region | target_rg | target_vnet | target_subnet | target_machine_sku | target_disk_type |
-|---------------------|---------------|-----------|-------------|---------------|--------------------|------------------|
-| web-server-01 | eastus | migration-rg | migration-vnet | default | Standard_D4s_v3 | Premium_LRS |
-| db-server-01 | eastus | migration-rg | migration-vnet | database | Standard_E8s_v3 | Premium_LRS |
+### Landing Zone Validation
+- ✅ **Access Validation**: RBAC permissions for Azure Migrate and Site Recovery
+- ✅ **Appliance Health**: Azure Migrate appliance status and connectivity  
+- ✅ **Storage Cache**: Cache storage account validation and auto-creation
+- ✅ **Quota Validation**: vCPU and resource quotas in target regions
 
-**📖 Full requirements:** [FEATURES.md - Excel Configuration](docs/FEATURES.md#excel-based-configuration)
+### Server Validation  
+- ✅ **Region Validation**: Target Azure region availability
+- ✅ **Resource Group**: Target resource group existence and access
+- ✅ **Network Validation**: VNet and subnet configuration
+- ✅ **VM SKU Validation**: Target VM SKU availability and compatibility
+- ✅ **Disk Validation**: Disk type and configuration validation
+- ✅ **Discovery Validation**: Machine discovery status in Azure Migrate
+- ✅ **RBAC Validation**: Machine-specific access permissions
 
----
+### Intelligent Validation (Advanced)
+- 🧠 **Project Matching**: Automatic server-to-project association
+- 🧠 **Discovery Integration**: Live Azure Migrate discovery status  
+- 🧠 **Cross-Subscription**: Handle complex enterprise scenarios
+- 🧠 **Enhanced Reporting**: Detailed insights and recommendations
 
-## 🔐 Authentication & Permissions
+## 🔧 Command Line Options
 
-**Authentication Methods:**
-The tool supports **6 authentication methods** similar to Azure CLI:
-
-1. **Azure CLI** - `az login` (Recommended for development)
-2. **Managed Identity** - System or user-assigned (Best for production)
-3. **Service Principal** - Client ID + Secret (Best for automation/CI-CD)
-4. **Interactive Browser** - Opens browser for sign-in
-5. **Device Code** - For SSH/remote sessions
-6. **Default Chain** - Auto-detects best method
-
-**Usage Examples:**
+### Global Options
 ```bash
-# Azure CLI (recommended)
-az login
-azmig --auth-method azure_cli --excel servers.xlsx
+azmig [OPTIONS] COMMAND [ARGS]...
 
-# Managed Identity (on Azure VM/App Service)
-azmig --auth-method managed_identity --excel servers.xlsx
-
-# Service Principal (automation)
-azmig --auth-method service_principal \
-    --tenant-id "xxx" --client-id "yyy" --client-secret "zzz" \
-    --excel servers.xlsx
-
-# Let tool prompt for method
-azmig --excel servers.xlsx
+Options:
+  --auth-method [azure_cli|service_principal|managed_identity]
+                        Azure authentication method
+  --profile TEXT        Validation profile (default, quick, full, rbac_only)
+  --non-interactive     Run without interactive prompts
+  --debug              Enable debug logging
+  --help               Show help message
 ```
 
-**Required Permissions:**
-- **Reader** on subscription
-- **Contributor** on Azure Migrate project
-- **Contributor** on Recovery Services Vault
-- **Contributor** on target resource groups
+### Validation Commands
+```bash
+# Validate with Excel file (servers)
+azmig validate --excel-file FILE [--profile PROFILE]
 
-**📖 Complete authentication guide:** [INSTALLATION.md - Azure Authentication](docs/INSTALLATION.md#azure-authentication)
+# Validate with CSV file (landing zone)  
+azmig validate --csv-file FILE --type landing-zone
 
----
+# Validate with JSON file (landing zone)
+azmig validate --json-file FILE --type landing-zone
 
-## 🐛 Troubleshooting
+# Intelligent validation (combines both layers)
+azmig validate --excel-file FILE --intelligent
 
-**Common issues and solutions:**
+# Custom validation config
+azmig validate --excel-file FILE --config custom_config.yaml
+```
 
-| Issue | Solution |
-|-------|----------|
-| Excel file not found | Verify file path, use absolute paths |
-| Invalid Azure region | Check spelling (e.g., `eastus` not `East US`) |
-| VM SKU not available | Check availability: `az vm list-skus --location <region>` |
-| RBAC validation failed | Request Contributor access, verify login |
+### Interactive Mode
+```bash
+# Launch interactive wizard
+azmig
 
-**� Complete guide:** [INSTALLATION.md - Troubleshooting](docs/INSTALLATION.md#troubleshooting)
+# Launch with specific authentication
+azmig --auth-method service_principal
+```
 
----
+## 📁 Project Structure
+
+```
+azmig_tool/
+├── core/              # Core business logic and models
+├── interface/         # CLI, wizard, and user interaction
+├── utils/             # Utilities (auth, retry, errors, progress)  
+├── management/        # Project and template management
+├── config/            # Configuration parsing and validation
+├── validators/        # Validation engine with core validators and wrappers
+├── clients/           # Azure API clients
+├── base/              # Base interfaces and contracts
+└── formatters/        # Output formatting and tables
+```
+
+## 🚨 Common Issues & Solutions
+
+### Authentication Issues
+```bash
+# Issue: "Authentication failed"
+# Solution: Re-login with Azure CLI
+az login --tenant YOUR_TENANT_ID
+
+# Issue: "Insufficient permissions"
+# Solution: Ensure user has required roles:
+# - Reader on subscription
+# - Contributor on target resource groups
+```
+
+### Validation Errors
+```bash
+# Issue: "Resource not found"  
+# Solution: Verify resource names and subscription access
+
+# Issue: "Quota exceeded"
+# Solution: Request quota increase in Azure portal
+
+# Issue: "Network configuration invalid"
+# Solution: Verify VNet/subnet names and regions match
+```
+
+### Performance Issues
+```bash
+# Issue: Slow validation
+# Solution: Use quick profile for faster results
+azmig validate --excel-file servers.xlsx --profile quick
+
+# Issue: API throttling
+# Solution: Tool automatically retries with backoff
+```
+
+## 📖 Documentation
+
+- **[Architecture Guide](docs/ARCHITECTURE.md)** - Technical architecture and design patterns
+- **[User Guide](docs/USER_GUIDE.md)** - Complete usage guide with examples and workflows
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please:
-
-1. Check [ROADMAP.md](docs/ROADMAP.md) for planned features
-2. Open an issue to discuss your idea
-3. Fork the repository
-4. Create a feature branch
-5. Submit a pull request
-
-**📖 Development setup:** [INSTALLATION.md - Development Setup](docs/INSTALLATION.md#development-setup)
-
----
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)  
+5. Open a Pull Request
 
 ## 📄 License
 
-MIT License - See [LICENSE](LICENSE) file for details
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🆘 Support
+
+- **Documentation**: See [docs/](docs/) folder for detailed guides
+- **Issues**: Report bugs and feature requests on GitHub Issues
+- **Architecture**: See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for technical details
+
+## 🏷️ Version History
+
+- **v3.0.0**: Major architecture refactor with organized folder structure and intelligent validation
+- **v2.x.x**: Enhanced Azure integration and validation profiles
+- **v1.x.x**: Initial release with basic validation capabilities
 
 ---
 
-## 📞 Support
-
-- **Issues:** [GitHub Issues](https://github.com/atef-aziz/azmig_tool/issues)
-- **Discussions:** [GitHub Discussions](https://github.com/atef-aziz/azmig_tool/discussions)
-- **Email:** atef.aziz@example.com
-
----
-
-## 🚀 What's New in v1.0.0
-
-### Development Release 🏗️
-
-- ✅ **Modular structure** - Purpose-specific modules: `clients/`, `config/`, `formatters/`, `base/`
-- ✅ **Clear naming** - Landing Zone/Server terminology for better clarity
-- ✅ **Flexible imports** - Multiple import patterns supported
-- ✅ **Well-organized** - Clean separation of concerns across modules
-
-### Module Structure
-
-```python
-# ✅ RECOMMENDED Import Patterns
-from azmig_tool.clients import AzureMigrateClient, AzureSiteRecoveryClient
-from azmig_tool.config import ConfigParser, LandingZoneConfigParser
-from azmig_tool.formatters import TableFormatter
-from azmig_tool.base import LandingZoneValidator, ServerValidator
-
-# Alternative imports (also supported)
-from azmig_tool.config import Layer1ConfigParser  # Alias for backward compatibility
-from azmig_tool.formatters import format_layer1_results  # Alias for backward compatibility
-```
-
-### Getting Started
-
-**Multiple import patterns supported** for flexibility. Use the recommended patterns above for best practices.
-
-**📖 Complete user guide:** [USER_GUIDE.md](docs/USER_GUIDE.md)
-
-**📖 See full changelog:** [CHANGELOG.md](CHANGELOG.md)
-
-**📖 Architecture overview:** [ARCHITECTURE.md](ARCHITECTURE.md)
-
-**📖 Future plans:** [ROADMAP.md](docs/ROADMAP.md)
-
----
-
-**Version:** 1.0.0-dev  
-**Status:** In Development  
-**Made with ❤️ for Azure Migrations**
+**Made with ❤️ for Azure Migration Projects**

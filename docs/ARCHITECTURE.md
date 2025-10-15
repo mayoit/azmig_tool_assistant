@@ -1,322 +1,640 @@
-# Azure Bulk Migration Tool - Architecture Documentation
+# Azure Migration Tool - Architecture Documentation# Azure Bulk Migration Tool - Architecture Documentation
 
-## Table of Contents
+
+
+## Overview## Table of Contents
+
 1. [Overview](#overview)
-2. [System Architecture](#system-architecture)
-3. [Directory Structure](#directory-structure)
-4. [Core Components](#core-components)
-5. [Validation System](#validation-system)
-6. [Configuration Management](#configuration-management)
-7. [Design Patterns](#design-patterns)
-8. [Extension Points](#extension-points)
-9. [Testing Strategy](#testing-strategy)
-10. [Performance & Security](#performance--security)
 
----
+The Azure Migration Tool is a comprehensive Python CLI application designed for bulk server migration from on-premises environments to Azure. The tool provides live Azure integration with a sophisticated two-layer validation architecture, intelligent project matching, and comprehensive migration readiness assessment.2. [System Architecture](#system-architecture)
+
+3. [Directory Structure](#directory-structure)
+
+## Version Information4. [Core Components](#core-components)
+
+- **Current Version**: 3.0.05. [Validation System](#validation-system)
+
+- **Architecture**: Modular, organized folder structure with clear separation of concerns6. [Configuration Management](#configuration-management)
+
+- **Target Platform**: Python 3.9+7. [Design Patterns](#design-patterns)
+
+- **Azure Integration**: Live API integration with Azure Migrate, Site Recovery, and Resource Manager8. [Extension Points](#extension-points)
+
+9. [Testing Strategy](#testing-strategy)
+
+## Core Architecture Principles10. [Performance & Security](#performance--security)
+
+
+
+### 1. Two-Layer Validation System---
+
+The tool implements a sophisticated validation approach:
 
 ## Overview
 
-The Azure Bulk Migration Tool is a comprehensive CLI application designed for bulk server migration from on-premises data centers to Azure using Azure Migrate and Azure Site Recovery.
+- **Layer 1 (Landing Zone)**: Project-level validation including Azure Migrate projects, appliances, quotas, and RBAC
 
-### Key Characteristics
-- **Two-Layer Validation Architecture**: Landing Zone (project-level) and Servers (machine-level)
-- **Configurable Validations**: YAML-based configuration for flexible validation control
-- **Mock/Live Modes**: Offline testing and production Azure integration
+- **Layer 2 (Servers)**: Machine-level validation covering regions, resource groups, VNets, SKUs, and discovery statusThe Azure Bulk Migration Tool is a comprehensive CLI application designed for bulk server migration from on-premises data centers to Azure using Azure Migrate and Azure Site Recovery.
+
+
+
+### 2. Live Azure Integration### Key Characteristics
+
+- Real-time Azure API integration using `azmig_tool/clients/` - **Two-Layer Validation Architecture**: Landing Zone (project-level) and Servers (machine-level)
+
+- All validators implement base interfaces from `azmig_tool/base/`- **Configurable Validations**: YAML-based configuration for flexible validation control
+
+- Comprehensive error handling with Azure trace ID tracking- **Mock/Live Modes**: Offline testing and production Azure integration
+
 - **Interactive Wizard**: Guided migration workflow
-- **Batch Processing**: Simultaneous validation of multiple servers
 
----
+### 3. Configuration-Driven Validation- **Batch Processing**: Simultaneous validation of multiple servers
 
-## System Architecture
+All validations are controlled by `validation_config.yaml` with profiles:
+
+```yaml---
+
+servers:
+
+  region_validation: {enabled: true}## System Architecture
+
+  rbac_validation: {enabled: false}  # Can be disabled
 
 ### High-Level Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
+profiles:
+
+  quick: {overrides: {servers.rbac_validation.enabled: false}}```
+
+```┌─────────────────────────────────────────────────────────────┐
+
 │             Azure Bulk Migration Tool v1.0.0                 │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-        ┌──────────────────────────────────────────┐
-        │     CLI Interface (cli.py)                │
-        │  --live, --mock, --validation-config,     │
-        │  --validation-profile, --excel            │
-        └──────────────────────────────────────────┘
-                              │
-         ┌────────────────────┴────────────────────┐
-         │                                         │
-         ▼                                         ▼
-┌────────────────────┐                  ┌──────────────────────┐
-│  Configuration     │                  │  Validation Engine    │
-│  Management        │                  │                       │
-├────────────────────┤                  ├──────────────────────┤
-│ config_parser.py   │                  │ Landing Zone Layer    │
-│ • CSV/JSON (LZ)    │                  │ ┌──────────────────┐ │
-│ • Excel (Servers)  │◄─────────────────┤ │ BaseLandingZone  │ │
-│                    │                  │ │ Validator        │ │
-│ validation_config_ │                  │ └──────────────────┘ │
-│ loader.py          │                  │        ▲             │
-│ • YAML config      │                  │ ┌──────┴──────────┐  │
-│ • Profiles         │                  │ │ Mock   │  Live  │  │
-│ • Enable/Disable   │                  │ │Landing │Landing │  │
-└────────────────────┘                  │ │Zone    │Zone    │  │
-                                        │ └──────────────────┘  │
-                                        │                      │
-                                        │ Servers Layer        │
-                                        │ ┌──────────────────┐ │
-                                        │ │ BaseValidator    │ │
-                                        │ └──────────────────┘ │
-                                        │        ▲             │
-                                        │ ┌──────┴──────────┐  │
-                                        │ │ Mock   │  Live  │  │
-                                        │ │Validator│Validator│ │
-                                        │ └──────────────────┘  │
-                                        └──────────────────────┘
-                                                  │
-                                                  ▼
-                                        ┌──────────────────────┐
-                                        │  Output & Reporting   │
-                                        ├──────────────────────┤
-                                        │ • Rich Tables        │
-                                        │ • JSON Reports       │
-                                        │ • Console Output     │
-                                        │ • Validation Logs    │
-                                        └──────────────────────┘
-```
 
-### Component Interaction Flow
+## Folder Structure└─────────────────────────────────────────────────────────────┘
 
-```
-User Input
-    │
-    ▼
-CLI Parser ──► Validation Config Loader ──► Load YAML/Apply Profile
-    │                                              │
-    ▼                                              ▼
-Config Parser ──► Detect Format ──► Parse ──► Validation Engine
-    │                                              │
-    │                                              ▼
+                              │
+
+```                              ▼
+
+azmig_tool/        ┌──────────────────────────────────────────┐
+
+├── __init__.py                    # Main module entry point        │     CLI Interface (cli.py)                │
+
+├── core/                          # Core business logic and models        │  --live, --mock, --validation-config,     │
+
+│   ├── __init__.py        │  --validation-profile, --excel            │
+
+│   ├── models.py                  # Data models and schemas        └──────────────────────────────────────────┘
+
+│   ├── constants.py               # Application constants                                │
+
+│   └── core.py                   # Core business logic         ┌────────────────────┴────────────────────┐
+
+├── interface/                     # User interface components           │                                         │
+
+│   ├── __init__.py         ▼                                         ▼
+
+│   ├── cli.py                    # Command-line interface┌────────────────────┐                  ┌──────────────────────┐
+
+│   ├── wizard.py                 # Interactive wizard│  Configuration     │                  │  Validation Engine    │
+
+│   └── interactive_prompts.py    # User input prompts│  Management        │                  │                       │
+
+├── utils/                         # Utility functions and helpers├────────────────────┤                  ├──────────────────────┤
+
+│   ├── __init__.py│ config_parser.py   │                  │ Landing Zone Layer    │
+
+│   ├── auth.py                   # Authentication utilities│ • CSV/JSON (LZ)    │                  │ ┌──────────────────┐ │
+
+│   ├── retry_logic.py            # Retry mechanisms│ • Excel (Servers)  │◄─────────────────┤ │ BaseLandingZone  │ │
+
+│   ├── error_context.py          # Error handling context│                    │                  │ │ Validator        │ │
+
+│   ├── progress_tracker.py       # Progress tracking│ validation_config_ │                  │ └──────────────────┘ │
+
+│   └── exit_codes.py             # Application exit codes│ loader.py          │                  │        ▲             │
+
+├── management/                    # Project and template management│ • YAML config      │                  │ ┌──────┴──────────┐  │
+
+│   ├── __init__.py│ • Profiles         │                  │ │ Mock   │  Live  │  │
+
+│   ├── project_manager.py        # Project management logic│ • Enable/Disable   │                  │ │Landing │Landing │  │
+
+│   └── template_manager.py       # Template handling└────────────────────┘                  │ │Zone    │Zone    │  │
+
+├── config/                        # Configuration handling                                        │ └──────────────────┘  │
+
+│   ├── __init__.py                                        │                      │
+
+│   ├── parsers.py               # File parsers (CSV, JSON, Excel)                                        │ Servers Layer        │
+
+│   ├── validation_config.py     # Validation configuration                                        │ ┌──────────────────┐ │
+
+│   └── validation_config.yaml   # Configuration file                                        │ │ BaseValidator    │ │
+
+├── validators/                    # Validation engine                                        │ └──────────────────┘ │
+
+│   ├── __init__.py                                        │        ▲             │
+
+│   ├── core/                    # Specialized core validators                                        │ ┌──────┴──────────┐  │
+
+│   │   ├── access_validator.py  # RBAC and permissions                                        │ │ Mock   │  Live  │  │
+
+│   │   ├── appliance_validator.py # Azure Migrate appliances                                        │ │Validator│Validator│ │
+
+│   │   ├── discovery_validator.py # Machine discovery                                        │ └──────────────────┘  │
+
+│   │   ├── disk_validator.py    # Disk configuration                                        └──────────────────────┘
+
+│   │   ├── quota_validator.py   # Azure quotas                                                  │
+
+│   │   ├── rbac_validator.py    # Role-based access                                                  ▼
+
+│   │   ├── region_validator.py  # Azure regions                                        ┌──────────────────────┐
+
+│   │   ├── resource_group_validator.py # Resource groups                                        │  Output & Reporting   │
+
+│   │   ├── storage_validator.py # Storage accounts                                        ├──────────────────────┤
+
+│   │   ├── vmsku_validator.py   # Virtual machine SKUs                                        │ • Rich Tables        │
+
+│   │   └── vnet_validator.py    # Virtual networks                                        │ • JSON Reports       │
+
+│   └── wrappers/               # Orchestrator wrappers                                        │ • Console Output     │
+
+│       ├── landing_zone_wrapper.py        # Landing zone orchestrator                                        │ • Validation Logs    │
+
+│       ├── servers_wrapper.py             # Servers orchestrator                                        └──────────────────────┘
+
+│       └── intelligent_servers_wrapper.py # Intelligent validation```
+
+├── clients/                       # Azure API clients
+
+│   ├── __init__.py### Component Interaction Flow
+
+│   ├── azure_client.py           # Base Azure client
+
+│   └── azure_migrate_client.py   # Azure Migrate specific client```
+
+├── base/                          # Base interfaces and contractsUser Input
+
+│   ├── __init__.py    │
+
+│   ├── validator_interface.py     # Validator base interface    ▼
+
+│   └── landing_zone_interface.py # Landing zone base interfaceCLI Parser ──► Validation Config Loader ──► Load YAML/Apply Profile
+
+├── formatters/                    # Output formatting    │                                              │
+
+│   ├── __init__.py    ▼                                              ▼
+
+│   └── table_formatter.py       # Rich table formattingConfig Parser ──► Detect Format ──► Parse ──► Validation Engine
+
+└── intelligent_validator.py      # Legacy intelligent validator (to be deprecated)    │                                              │
+
+```    │                                              ▼
+
     │                                    Check Config Enablement
-    │                                              │
+
+## Key Components    │                                              │
+
     │                            ┌─────────────────┴─────────────────┐
+
+### Core Module (`azmig_tool/core/`)    │                            ▼                                   ▼
+
+- **models.py**: Comprehensive data models using `@dataclass` with type hints    │                    Landing Zone Layer                   Servers Layer
+
+- **constants.py**: Application constants including Azure regions, SKUs, and role definitions    │                    (Project Readiness)                  (Machine Config)
+
+- **core.py**: Main business logic and orchestration functions    │                            │                                   │
+
     │                            ▼                                   ▼
-    │                    Landing Zone Layer                   Servers Layer
-    │                    (Project Readiness)                  (Machine Config)
-    │                            │                                   │
-    │                            ▼                                   ▼
-    │                    Skip if disabled                    Skip if disabled
-    │                            │                                   │
-    └────────────────────────────┴───────────────────────────────────┘
-                                 │
+
+### Interface Module (`azmig_tool/interface/`)    │                    Skip if disabled                    Skip if disabled
+
+- **cli.py**: Command-line interface with argument parsing    │                            │                                   │
+
+- **wizard.py**: Interactive wizard for guided migration setup    └────────────────────────────┴───────────────────────────────────┘
+
+- **interactive_prompts.py**: User input handling and validation                                 │
+
                                  ▼
-                         Consolidated Results
+
+### Validation Engine (`azmig_tool/validators/`)                         Consolidated Results
+
                                  │
-                                 ▼
-                         Enhanced Formatting
-                                 │
-                                 ▼
-                         Console/JSON Output
+
+#### Core Validators (`validators/core/`)                                 ▼
+
+Each validator is specialized for a specific Azure resource or concept:                         Enhanced Formatting
+
+- Implements base interfaces from `azmig_tool/base/`                                 │
+
+- Uses live Azure API integration                                 ▼
+
+- Returns structured `ValidationResult` objects                         Console/JSON Output
+
+- Handles Azure API errors gracefully with retry logic```
+
+
+
+#### Wrapper Orchestrators (`validators/wrappers/`)---
+
+- **LandingZoneValidatorWrapper**: Orchestrates landing zone validation
+
+- **ServersValidatorWrapper**: Orchestrates server-level validation  ## Directory Structure
+
+- **IntelligentServersValidatorWrapper**: Advanced validation with project matching
+
 ```
 
----
+### Configuration System (`azmig_tool/config/`)azmig_tool_package/
 
-## Directory Structure
+- **Unified parsing**: Auto-detects CSV/JSON (Layer 1) and Excel (Layer 2)├── azmig_tool/                          # Main package
 
-```
-azmig_tool_package/
-├── azmig_tool/                          # Main package
-│   ├── __init__.py                      # Package initialization
-│   ├── cli.py                           # CLI entry point with argument parsing
+- **Validation profiles**: Different validation configurations (quick, full, rbac_only)│   ├── __init__.py                      # Package initialization
+
+- **Configuration singleton**: Ensures consistent configuration across components│   ├── cli.py                           # CLI entry point with argument parsing
+
 │   ├── wizard.py                        # Interactive wizard workflow
+
+### Azure Integration (`azmig_tool/clients/`)│   │
+
+- **Live API integration**: Real-time Azure resource validation│   ├── models.py                        # 🎯 Consolidated data models
+
+- **Comprehensive error handling**: Azure trace ID tracking and meaningful error messages│   │   ├── Landing Zone Models          # Project-level configuration & results
+
+- **Authentication support**: Multiple auth methods (CLI, Service Principal, Managed Identity)│   │   └── Servers Models               # Machine-level configuration & results
+
 │   │
-│   ├── models.py                        # 🎯 Consolidated data models
-│   │   ├── Landing Zone Models          # Project-level configuration & results
-│   │   └── Servers Models               # Machine-level configuration & results
-│   │
-│   ├── validators/                      # 🎯 Validation engine
+
+## Data Flow Architecture│   ├── validators/                      # 🎯 Validation engine
+
 │   │   ├── __init__.py                  # Exports all validators
+
+### 1. Configuration Phase│   │   │
+
+```│   │   ├── landing_zone_validator.py   # Base Landing Zone validator
+
+User Input → ConfigParser → ValidationConfig → Validation Engine│   │   ├── mock_landing_zone_validator.py  # Mock LZ implementation
+
+```│   │   ├── live_landing_zone_validator.py  # Live LZ implementation (future)
+
 │   │   │
-│   │   ├── landing_zone_validator.py   # Base Landing Zone validator
-│   │   ├── mock_landing_zone_validator.py  # Mock LZ implementation
-│   │   ├── live_landing_zone_validator.py  # Live LZ implementation (future)
-│   │   │
-│   │   ├── base.py                      # Base Servers validator
-│   │   ├── mock_validator.py           # Mock Servers implementation
-│   │   └── live_validator.py           # Live Servers implementation
-│   │
+
+### 2. Authentication Phase│   │   ├── base.py                      # Base Servers validator
+
+```│   │   ├── mock_validator.py           # Mock Servers implementation
+
+Auth Method → Credential Factory → Azure Clients → API Authentication│   │   └── live_validator.py           # Live Servers implementation
+
+```│   │
+
 │   ├── config_parser.py                 # 🎯 Unified configuration parser
-│   │   ├── Auto-detection (CSV/JSON/Excel)
-│   │   ├── Landing Zone parsing (CSV/JSON)
-│   │   └── Servers parsing (Excel)
-│   │
+
+### 3. Validation Phase│   │   ├── Auto-detection (CSV/JSON/Excel)
+
+```│   │   ├── Landing Zone parsing (CSV/JSON)
+
+Input Data → Landing Zone Validation → Server Validation → Results Aggregation│   │   └── Servers parsing (Excel)
+
+```│   │
+
 │   ├── validation_config_loader.py      # 🎯 Validation configuration system
-│   │   ├── ValidationConfig class
-│   │   ├── ValidationConfigLoader class
-│   │   ├── Profile application
-│   │   └── Singleton pattern
+
+### 4. Intelligent Validation Phase (Advanced)│   │   ├── ValidationConfig class
+
+```│   │   ├── ValidationConfigLoader class
+
+Server Configs → Project Matching → Discovery Check → Readiness Assessment│   │   ├── Profile application
+
+```│   │   └── Singleton pattern
+
 │   │
-│   ├── enhanced_table_formatter.py      # Rich console output
+
+## Validation Workflow│   ├── enhanced_table_formatter.py      # Rich console output
+
 │   ├── constants.py                     # Configuration constants
-│   │
-│   ├── azure_migrate.py                 # Azure Migrate API client
-│   ├── migrate_api_client.py            # REST API wrapper
-│   ├── api_client.py                    # Azure SDK wrapper
-│   │
+
+### Landing Zone Validation (Layer 1)│   │
+
+1. **Access Validation**: RBAC permissions for Azure Migrate and Site Recovery│   ├── azure_migrate.py                 # Azure Migrate API client
+
+2. **Appliance Health**: Azure Migrate appliance status and connectivity│   ├── migrate_api_client.py            # REST API wrapper
+
+3. **Storage Cache**: Cache storage account validation and auto-creation│   ├── api_client.py                    # Azure SDK wrapper
+
+4. **Quota Validation**: vCPU and resource quotas in target regions│   │
+
 │   └── modes/                           # Execution modes
-│       ├── __init__.py
-│       ├── live_mode.py                 # Live Azure integration mode
-│       └── mock_mode.py                 # Offline simulation mode
-│
-├── docs/                                # 📚 Documentation
-│   ├── ARCHITECTURE.md                  # This file - Technical architecture
-│   ├── INSTALLATION.md                  # Installation guide
-│   ├── FEATURES.md                      # Feature documentation
+
+### Server Validation (Layer 2)│       ├── __init__.py
+
+1. **Region Validation**: Target Azure region availability and capabilities│       ├── live_mode.py                 # Live Azure integration mode
+
+2. **Resource Group**: Target resource group existence and access│       └── mock_mode.py                 # Offline simulation mode
+
+3. **Network Validation**: VNet and subnet configuration validation│
+
+4. **VM SKU Validation**: Target VM SKU availability and compatibility├── docs/                                # 📚 Documentation
+
+5. **Disk Validation**: Disk type and configuration validation│   ├── ARCHITECTURE.md                  # This file - Technical architecture
+
+6. **Discovery Validation**: Machine discovery status in Azure Migrate│   ├── INSTALLATION.md                  # Installation guide
+
+7. **RBAC Validation**: Machine-specific access permissions│   ├── FEATURES.md                      # Feature documentation
+
 │   └── ROADMAP.md                       # Future enhancements
-│
-├── tests/                               # Test suite
-│   ├── data/                            # Sample data for tests
-│   │   ├── sample_migrate_projects.csv  # Sample LZ CSV
-│   │   ├── sample_migrate_projects.json # Sample LZ JSON
+
+### Intelligent Validation (Advanced)│
+
+1. **Project Matching**: Automatic server-to-project association├── tests/                               # Test suite
+
+2. **Discovery Integration**: Live Azure Migrate discovery status│   ├── data/                            # Sample data for tests
+
+3. **Cross-Subscription**: Handle complex enterprise scenarios│   │   ├── sample_migrate_projects.csv  # Sample LZ CSV
+
+4. **Enhanced Reporting**: Detailed insights and recommendations│   │   ├── sample_migrate_projects.json # Sample LZ JSON
+
 │   │   └── sample_migration.xlsx        # Sample Servers Excel
-│   ├── test_layer1.py                   # Landing Zone tests
+
+## Error Handling Strategy│   ├── test_layer1.py                   # Landing Zone tests
+
 │   ├── test_config_parser.py            # Parser tests
-│   ├── test_validation_config.py        # Validation config tests
-│   ├── test_installation.py             # Installation tests
-│   ├── test_live_landing_zone.py        # Live landing zone tests
-│   └── test_subnet_validations.py       # Subnet validation tests
-│
-├── scripts/                             # Utility scripts
+
+### Azure API Error Patterns│   ├── test_validation_config.py        # Validation config tests
+
+- **401 Unauthorized**: Authentication failure with remediation guidance│   ├── test_installation.py             # Installation tests
+
+- **403 Forbidden**: Permission issues with specific RBAC requirements│   ├── test_live_landing_zone.py        # Live landing zone tests
+
+- **404 Not Found**: Resource missing with creation suggestions│   └── test_subnet_validations.py       # Subnet validation tests
+
+- **429 Throttling**: Rate limiting with exponential backoff retry│
+
+- **500+ Server Errors**: Transient issues with retry logic├── scripts/                             # Utility scripts
+
 │   ├── create_sample_excel.py           # Generate sample Excel file
-│   └── generate_sample_config.py        # Generate sample config files
-│
-├── examples/                            # User-facing templates
-│   └── template_migrate_projects.csv    # Template for LZ config
-│
-├── validation_config.yaml               # Default validation configuration
-├── requirements.txt                     # Python dependencies
-├── setup.py                             # Package setup
-├── README.md                            # Main entry documentation
+
+### Structured Error Response│   └── generate_sample_config.py        # Generate sample config files
+
+```python│
+
+@dataclass├── examples/                            # User-facing templates
+
+class ValidationResult:│   └── template_migrate_projects.csv    # Template for LZ config
+
+    stage: ValidationStage│
+
+    passed: bool├── validation_config.yaml               # Default validation configuration
+
+    message: str├── requirements.txt                     # Python dependencies
+
+    details: Optional[dict] = None├── setup.py                             # Package setup
+
+```├── README.md                            # Main entry documentation
+
 └── CHANGELOG.md                         # Version history
-```
 
-### Module Responsibilities
+## Authentication Architecture```
 
-| Module | Responsibility | Key Classes/Functions |
-|--------|---------------|----------------------|
+
+
+### Supported Authentication Methods### Module Responsibilities
+
+1. **Azure CLI**: `az login` based authentication
+
+2. **Service Principal**: Client ID/Secret based authentication  | Module | Responsibility | Key Classes/Functions |
+
+3. **Managed Identity**: Azure resource-based authentication|--------|---------------|----------------------|
+
 | `cli.py` | Command-line interface, argument parsing | `main()`, argparse setup |
-| `wizard.py` | Interactive migration workflow | `MigrationWizard` |
-| `models.py` | Data structures and validation | All dataclasses and enums |
-| `validators/` | Validation logic for both layers | All validator classes |
-| `config_parser.py` | Configuration file parsing | `ConfigParser` |
+
+### Token Management| `wizard.py` | Interactive migration workflow | `MigrationWizard` |
+
+- **Credential caching**: Per-profile token caching to avoid re-authentication| `models.py` | Data structures and validation | All dataclasses and enums |
+
+- **Automatic refresh**: Azure SDK handles token refresh automatically| `validators/` | Validation logic for both layers | All validator classes |
+
+- **Secure storage**: Credentials stored securely using Azure SDK patterns| `config_parser.py` | Configuration file parsing | `ConfigParser` |
+
 | `validation_config_loader.py` | Validation settings management | `ValidationConfig`, `ValidationConfigLoader` |
-| `enhanced_table_formatter.py` | Console output formatting | `EnhancedTableFormatter` |
+
+## Configuration Profiles| `enhanced_table_formatter.py` | Console output formatting | `EnhancedTableFormatter` |
+
 | `constants.py` | Shared constants and configurations | Region lists, role IDs, etc. |
-| `modes/` | Execution mode wrappers | `run_mock_mode()`, `run_live_mode()` |
 
----
+### Profile System| `modes/` | Execution mode wrappers | `run_mock_mode()`, `run_live_mode()` |
 
-## Core Components
+```yaml
 
-### 1. Data Models (`models.py`)
+active_profile: "default"---
 
-Centralized data models using Python dataclasses with type hints and validation.
 
-#### Landing Zone Models
 
-```python
-# Enumerations
-class ApplianceType(Enum):
-    VMWARE = "VMware"
-    HYPERV = "Hyper-V"
-    PHYSICAL = "Physical"
+profiles:## Core Components
+
+  quick:
+
+    overrides:### 1. Data Models (`models.py`)
+
+      servers.rbac_validation.enabled: false
+
+      servers.discovery_validation.enabled: falseCentralized data models using Python dataclasses with type hints and validation.
+
+  
+
+  full:#### Landing Zone Models
+
+    overrides:
+
+      # All validations enabled (default)```python
+
+  # Enumerations
+
+  rbac_only:class ApplianceType(Enum):
+
+    overrides:    VMWARE = "VMware"
+
+      servers.region_validation.enabled: false    HYPERV = "Hyper-V"
+
+      servers.vnet_subnet_validation.enabled: false    PHYSICAL = "Physical"
+
+```
 
 class HealthStatus(Enum):
-    HEALTHY = "Healthy"
-    WARNING = "Warning"
-    UNHEALTHY = "Unhealthy"
-    CRITICAL = "Critical"
 
-# Configuration
-@dataclass
+## Extensibility Points    HEALTHY = "Healthy"
+
+    WARNING = "Warning"
+
+### Adding New Validators    UNHEALTHY = "Unhealthy"
+
+1. Implement base interface in `validators/core/`    CRITICAL = "Critical"
+
+2. Add to validation configuration schema
+
+3. Register in appropriate wrapper orchestrator# Configuration
+
+4. Add error handling patterns@dataclass
+
 class MigrateProjectConfig:
-    """Azure Migrate project configuration"""
-    subscription_id: str
-    migrate_project_name: str
-    appliance_type: ApplianceType
-    region: str
+
+### Adding New Input Formats    """Azure Migrate project configuration"""
+
+1. Extend `ConfigParser` in `config/parsers.py`    subscription_id: str
+
+2. Add format detection logic    migrate_project_name: str
+
+3. Implement parsing methods    appliance_type: ApplianceType
+
+4. Add validation for required columns    region: str
+
     # ... additional fields
 
-# Results
-@dataclass
-class ProjectReadinessResult:
-    """Consolidated project readiness result"""
+### Adding New Authentication Methods
+
+1. Extend `AuthManager` in `utils/auth.py`# Results
+
+2. Add credential factory methods@dataclass
+
+3. Update configuration schemaclass ProjectReadinessResult:
+
+4. Add user guidance documentation    """Consolidated project readiness result"""
+
     config: MigrateProjectConfig
-    access_result: Optional[AccessValidationResult]
+
+## Performance Considerations    access_result: Optional[AccessValidationResult]
+
     appliance_result: Optional[ApplianceHealthResult]
-    storage_result: Optional[StorageCacheResult]
-    quota_result: Optional[QuotaValidationResult]
-    
-    def is_ready(self) -> bool:
+
+### Parallel Execution    storage_result: Optional[StorageCacheResult]
+
+- Validation operations can run concurrently where safe    quota_result: Optional[QuotaValidationResult]
+
+- Azure API calls use connection pooling    
+
+- Intelligent batching for bulk operations    def is_ready(self) -> bool:
+
         """Check if project is ready for migration"""
-        # Validation logic
-```
 
-#### Servers Models
+### Resource Optimization        # Validation logic
 
-```python
-# Enumerations
-class ValidationStage(Enum):
-    EXCEL_STRUCTURE = "Excel Structure"
+- Connection reuse across validation operations```
+
+- Caching of Azure resource metadata
+
+- Lazy loading of validation components#### Servers Models
+
+
+
+### Scalability Patterns```python
+
+- Batch processing for large server lists# Enumerations
+
+- Streaming validation resultsclass ValidationStage(Enum):
+
+- Progress tracking for long-running operations    EXCEL_STRUCTURE = "Excel Structure"
+
     AZURE_REGION = "Azure Region"
-    RESOURCE_GROUP = "Resource Group"
+
+## Security Architecture    RESOURCE_GROUP = "Resource Group"
+
     # ... additional stages
 
-# Configuration
-@dataclass
-class MigrationConfig:
+### Credential Isolation
+
+- No credential persistence to disk# Configuration
+
+- Memory-only credential caching@dataclass
+
+- Secure credential disposalclass MigrationConfig:
+
     """Individual machine migration configuration"""
-    target_machine_name: str
-    target_region: str
-    target_subscription: str
-    target_rg: str
+
+### Azure Permissions    target_machine_name: str
+
+- Principle of least privilege    target_region: str
+
+- Read-only operations where possible    target_subscription: str
+
+- Clear permission requirements documentation    target_rg: str
+
     # ... additional fields
 
-# Results
-@dataclass
-class ValidationResult:
-    """Single validation check result"""
-    stage: ValidationStage
-    passed: bool
-    message: str
-    details: Optional[str] = None
-```
+### Audit Trail
 
-### 2. Validation System
+- Azure trace ID tracking# Results
+
+- Validation operation logging@dataclass
+
+- Error context preservationclass ValidationResult:
+
+    """Single validation check result"""
+
+## Future Architecture Considerations    stage: ValidationStage
+
+    passed: bool
+
+### Planned Enhancements    message: str
+
+1. **Plugin Architecture**: Dynamic validator loading    details: Optional[str] = None
+
+2. **REST API**: Web service interface for integration```
+
+3. **Database Integration**: Persistent validation history
+
+4. **Multi-tenant**: Support for multiple Azure tenants### 2. Validation System
+
+5. **Workflow Engine**: Complex migration workflow orchestration
 
 #### Two-Layer Architecture
 
-**Layer 1: Landing Zone Validation (Project Readiness)**
+### Deprecation Path
 
-Validates Azure Migrate project-level prerequisites:
+- `intelligent_validator.py` will be deprecated in favor of wrapper architecture**Layer 1: Landing Zone Validation (Project Readiness)**
 
-```python
+- Legacy import aliases maintained for backward compatibility
+
+- Migration guides for API changesValidates Azure Migrate project-level prerequisites:
+
+
+
+## Testing Strategy```python
+
 from azmig_tool.validators import BaseLandingZoneValidator
 
-class BaseLandingZoneValidator(ABC):
-    """Base class for Landing Zone validators"""
-    
+### Unit Testing
+
+- Individual validator componentsclass BaseLandingZoneValidator(ABC):
+
+- Configuration parsing logic      """Base class for Landing Zone validators"""
+
+- Error handling scenarios    
+
     def __init__(self, validation_config: Optional[ValidationConfig] = None):
-        self.validation_config = validation_config or get_validation_config()
-    
-    @abstractmethod
-    def validate_access(self, config) -> AccessValidationResult:
+
+### Integration Testing          self.validation_config = validation_config or get_validation_config()
+
+- Live Azure API integration    
+
+- End-to-end validation workflows    @abstractmethod
+
+- Authentication method validation    def validate_access(self, config) -> AccessValidationResult:
+
         """Validate RBAC permissions"""
-        pass
-    
-    @abstractmethod
-    def validate_appliance_health(self, config) -> ApplianceHealthResult:
+
+### Performance Testing        pass
+
+- Large-scale validation scenarios    
+
+- Azure API rate limiting behavior    @abstractmethod
+
+- Memory usage optimization    def validate_appliance_health(self, config) -> ApplianceHealthResult:
+
         """Validate appliance health and connectivity"""
-        pass
+
+This architecture provides a robust, scalable, and maintainable foundation for Azure migration assessment and validation operations.        pass
     
     @abstractmethod
     def validate_storage_cache(self, config) -> StorageCacheResult:

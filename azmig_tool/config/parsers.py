@@ -11,14 +11,14 @@ from pathlib import Path
 from typing import List, Tuple, Union
 from rich.console import Console
 
-from ..models import (
+from ..core.models import (
     MigrationConfig,
     MigrateProjectConfig,
     ConsolidatedMigrationConfig,
     ValidationResult,
     ValidationStage
 )
-from ..constants import (
+from ..core.constants import (
     LANDING_ZONE_CSV_COLUMNS,
     LANDING_ZONE_OPTIONAL_COLUMNS,
     SERVERS_REQUIRED_COLUMNS,

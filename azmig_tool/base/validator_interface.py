@@ -6,7 +6,7 @@ This interface defines the contract that both Mock and Live validators must impl
 
 from abc import ABC, abstractmethod
 from typing import List, Dict, Optional
-from ..models import MigrationConfig, ValidationResult, AzureMigrateProject
+from ..core.models import MigrationConfig, ValidationResult, AzureMigrateProject
 from ..config.validation_config import ValidationConfig, get_validation_config
 
 

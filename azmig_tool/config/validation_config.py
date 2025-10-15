@@ -33,6 +33,52 @@ class ValidationConfig:
     """
     config_data: Dict[str, Any] = field(default_factory=dict)
 
+    def apply_profile(self, profile_name: str) -> bool:
+        """
+        Apply a validation profile to current configuration
+        
+        Args:
+            profile_name: Name of the profile to apply
+            
+        Returns:
+            True if profile was applied successfully, False otherwise
+        """
+        if "profiles" not in self.config_data:
+            return False
+            
+        profiles = self.config_data.get("profiles", {})
+        if profile_name not in profiles:
+            return False
+            
+        profile_config = profiles[profile_name]
+        
+        # Apply profile overrides
+        if "overrides" in profile_config:
+            for key_path, value in profile_config["overrides"].items():
+                self._set_nested_value(key_path, value)
+                
+        return True
+    
+    def _set_nested_value(self, key_path: str, value: Any):
+        """
+        Set a nested dictionary value using dot notation
+        
+        Args:
+            key_path: Dot-separated path (e.g., "landing_zone.access_validation.enabled")
+            value: Value to set
+        """
+        keys = key_path.split(".")
+        data = self.config_data
+        
+        # Navigate to parent of target key
+        for key in keys[:-1]:
+            if key not in data:
+                data[key] = {}
+            data = data[key]
+            
+        # Set the final value
+        data[keys[-1]] = value
+
     def _get_nested_value(self, key_path: str, default: Any = None) -> Any:
         """
         Get a nested dictionary value using dot notation
