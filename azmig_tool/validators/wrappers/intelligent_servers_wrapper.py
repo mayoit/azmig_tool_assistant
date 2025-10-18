@@ -30,6 +30,7 @@ from rich import box
 from .servers_wrapper import ServersValidatorWrapper, ServerValidationResult, ServersValidationReport
 from ...core.models import (
     MachineConfig,
+    MigrationConfig,
     MigrateProjectConfig,
     ProjectReadinessResult,
     MachineValidationReport,
@@ -48,7 +49,7 @@ console = Console()
 @dataclass
 class ProjectMatchResult:
     """Result of matching a server to a migrate project"""
-    server_config: MachineConfig
+    server_config: MigrationConfig
     matched_project: Optional[MigrateProjectConfig] = None
     cache_storage_account: Optional[str] = None
     recovery_vault: Optional[str] = None
@@ -125,7 +126,7 @@ class IntelligentServersValidatorWrapper(ServersValidatorWrapper):
         for project in projects:
             console.print(f"  • {project.migrate_project_name} ({project.region})")
     
-    def match_server_to_project(self, server: MachineConfig) -> ProjectMatchResult:
+    def match_server_to_project(self, server: MigrationConfig) -> ProjectMatchResult:
         """
         Match a server configuration to the appropriate migrate project
         
@@ -180,7 +181,7 @@ class IntelligentServersValidatorWrapper(ServersValidatorWrapper):
         
         return result
     
-    def _discover_cache_storage(self, server: MachineConfig, project: MigrateProjectConfig) -> Optional[str]:
+    def _discover_cache_storage(self, server: MigrationConfig, project: MigrateProjectConfig) -> Optional[str]:
         """
         Intelligently discover the appropriate cache storage account
         
@@ -215,7 +216,7 @@ class IntelligentServersValidatorWrapper(ServersValidatorWrapper):
         # Generate expected recovery vault name based on migrate project
         return f"{project.migrate_project_name}-MigrateVault-{project.migrate_project_name[-10:]}"
     
-    def check_machine_discovery(self, server: MachineConfig, project: MigrateProjectConfig) -> MachineDiscoveryInfo:
+    def check_machine_discovery(self, server: MigrationConfig, project: MigrateProjectConfig) -> MachineDiscoveryInfo:
         """
         Check if machine is discovered in Azure Migrate
         
@@ -227,7 +228,7 @@ class IntelligentServersValidatorWrapper(ServersValidatorWrapper):
             MachineDiscoveryInfo with discovery status and details
         """
         discovery_info = MachineDiscoveryInfo(
-            machine_name=server.target_machine_name,
+            machine_name=server.machine_name,
             discovered=False
         )
         
@@ -236,7 +237,7 @@ class IntelligentServersValidatorWrapper(ServersValidatorWrapper):
             discovered_machines = self._get_discovered_machines(project)
             
             # Enhanced machine name matching logic
-            server_name_lower = server.target_machine_name.lower()
+            server_name_lower = server.machine_name.lower()
             
             for machine in discovered_machines:
                 machine_name = machine.get('name', '').lower()
@@ -271,12 +272,12 @@ class IntelligentServersValidatorWrapper(ServersValidatorWrapper):
                     discovery_info.last_seen = machine.get('lastSeen')
                     discovery_info.discovery_source = "Azure Migrate API (name variation)"
                     console.print(
-                        f"[green]✓ Machine discovered (name variation): {server.target_machine_name} → {machine.get('name')} (IP: {machine.get('ipAddress')})[/green]")
+                        f"[green]✓ Machine discovered (name variation): {server.machine_name} → {machine.get('name')} (IP: {machine.get('ipAddress')})[/green]")
                     break
         
         except Exception as e:
             console.print(
-                f"[yellow]⚠ Could not check discovery status for {server.target_machine_name}: {str(e)}[/yellow]")
+                f"[yellow]⚠ Could not check discovery status for {server.machine_name}: {str(e)}[/yellow]")
         
         return discovery_info
     
@@ -404,7 +405,7 @@ class IntelligentServersValidatorWrapper(ServersValidatorWrapper):
                 validations.append(ValidationResult(
                     stage=ValidationStage.MACHINE_DISCOVERY,
                     passed=False,
-                    message=f"Machine '{server.target_machine_name}' not discovered in Azure Migrate",
+                    message=f"Machine '{server.machine_name}' not discovered in Azure Migrate",
                     details={
                         "appliance": match_result.matched_project.appliance_name if match_result.matched_project else "unknown"
                     }
@@ -448,8 +449,20 @@ class IntelligentServersValidatorWrapper(ServersValidatorWrapper):
         
         return validations
     
+    def _is_validation_passed(self, validation_result: Any) -> bool:
+        """
+        Check if a validation result is passed.
+        Handles both ValidationResult objects (with .passed) and specific result objects (with .status)
+        """
+        if hasattr(validation_result, 'passed'):
+            return validation_result.passed
+        elif hasattr(validation_result, 'status'):
+            return validation_result.status == ValidationStatus.OK
+        else:
+            return False
+
     def intelligent_validate_all_servers(self, 
-                                       configs: List[MachineConfig],
+                                       configs: List[MigrationConfig],
                                        migrate_project_name: Optional[str] = None,
                                        migrate_project_rg: Optional[str] = None) -> IntelligentServersValidationReport:
         """
@@ -469,7 +482,7 @@ class IntelligentServersValidatorWrapper(ServersValidatorWrapper):
         report = IntelligentServersValidationReport()
         
         for i, config in enumerate(configs, 1):
-            console.print(f"\n[cyan]Validating server {i}/{len(configs)}: {config.target_machine_name}[/cyan]")
+            console.print(f"\n[cyan]Validating server {i}/{len(configs)}: {config.machine_name}[/cyan]")
             
             # Step 1: Match server to project
             match_result = self.match_server_to_project(config)
@@ -483,7 +496,18 @@ class IntelligentServersValidatorWrapper(ServersValidatorWrapper):
                     report.discovered_machines += 1
             
             # Step 3: Run standard validations from base wrapper
-            server_result = self._validate_single_server(config, migrate_project_name, migrate_project_rg)
+            # Convert MigrationConfig to MachineConfig for base wrapper compatibility
+            machine_config = MachineConfig(
+                target_machine_name=config.machine_name,
+                target_region=config.target_region,
+                target_subscription=config.target_subscription,
+                target_rg=config.target_rg,
+                target_vnet=config.target_vnet,
+                target_subnet=config.target_subnet,
+                target_machine_sku=config.target_machine_sku,
+                target_disk_type=config.target_disk_type
+            )
+            server_result = self._validate_single_server(machine_config, migrate_project_name, migrate_project_rg)
             
             # Step 4: Create intelligent validation results  
             intelligent_validations = self.create_intelligent_validation_results(match_result)
@@ -520,8 +544,8 @@ class IntelligentServersValidatorWrapper(ServersValidatorWrapper):
             
             # Show quick status
             passed_standard = sum(1 for field in ['region_result', 'resource_group_result', 'vnet_result', 'vmsku_result', 'disk_result', 'rbac_result']
-                                if getattr(enhanced_result, field) and getattr(enhanced_result, field).passed)
-            passed_intelligent = sum(1 for v in intelligent_validations if v.passed)
+                                if getattr(enhanced_result, field) and self._is_validation_passed(getattr(enhanced_result, field)))
+            passed_intelligent = sum(1 for v in intelligent_validations if self._is_validation_passed(v))
             
             total_passed = passed_standard + passed_intelligent
             total_validations = 6 + len(intelligent_validations)  # 6 standard + intelligent validations

@@ -282,6 +282,8 @@ class ValidationConfigLoader:
         search_paths = [
             # Current working directory
             Path.cwd() / ValidationConfigLoader.DEFAULT_CONFIG_FILENAME,
+            # Package config directory (where config files are stored)
+            Path(__file__).parent / ValidationConfigLoader.DEFAULT_CONFIG_FILENAME,
             # Package root (parent of azmig_tool directory)
             Path(__file__).parent.parent /
             ValidationConfigLoader.DEFAULT_CONFIG_FILENAME,

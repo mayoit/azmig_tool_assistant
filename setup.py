@@ -24,7 +24,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "azmig=azmig_tool.cli:main",
+            "azmig=azmig_tool.interface.cli:main",
         ],
     },
     author="Atef Aziz",
