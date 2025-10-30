@@ -1,8 +1,16 @@
-# Changelog
+@# Changelog
 
 All notable changes to the Azure Bulk Migration Tool will be documented in this file.
 
 ## [3.0.1] - 2025-01-XX
+
+### ✨ New Features
+
+#### Replication Status Warning
+- **DiscoveryValidator** now checks if replication is already enabled for a machine
+- Displays warning with replication state if machine already has replication configured
+- Prevents accidental re-configuration of already protected machines
+- Provides clear guidance to disable replication first before re-enabling
 
 ### 🧹 Codebase Cleanup
 

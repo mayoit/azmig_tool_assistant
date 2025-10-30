@@ -7,6 +7,7 @@ Handles validation of machine discovery status:
 - Machine assessment readiness
 - Dependency mapping status
 - Replication readiness
+- Check if replication is already enabled
 """
 from typing import Optional, List, Dict, Any
 from azure.core.credentials import TokenCredential
@@ -17,6 +18,7 @@ from ...core.models import (
     ValidationStatus
 )
 from ...clients.azure_migrate_client import AzureMigrateIntegration
+from ...clients.azure_client import AzureMigrateApiClient
 
 
 class DiscoveryValidator:
@@ -40,6 +42,7 @@ class DiscoveryValidator:
         """
         self.credential = credential
         self._migrate_clients = {}
+        self._api_clients = {}
 
     def _get_migrate_client(self, subscription_id: str) -> AzureMigrateIntegration:
         """Get or create cached Azure Migrate client"""
@@ -48,6 +51,15 @@ class DiscoveryValidator:
                 self.credential
             )
         return self._migrate_clients[subscription_id]
+
+    def _get_api_client(self, subscription_id: str) -> AzureMigrateApiClient:
+        """Get or create cached Azure Migrate API client"""
+        if subscription_id not in self._api_clients:
+            self._api_clients[subscription_id] = AzureMigrateApiClient(
+                self.credential,
+                subscription_id
+            )
+        return self._api_clients[subscription_id]
 
     def validate(
         self, 
@@ -94,11 +106,24 @@ class DiscoveryValidator:
             # Extract discovery information
             discovery_info = self._extract_discovery_info(discovered_machine)
             
+            # Check if replication is already enabled for this machine
+            replication_status = self._check_replication_status(
+                config,
+                migrate_project_rg,
+                migrate_project_name
+            )
+            
             # Validate discovery health
             is_healthy, health_issues = self._validate_discovery_health(discovery_info)
 
             # Determine overall status
-            if not is_healthy:
+            if replication_status and replication_status.get("enabled"):
+                # Replication already enabled - WARNING
+                replication_state = replication_status.get("state", "Unknown")
+                status = ValidationStatus.WARNING
+                message = f"⚠️ Machine '{config.target_machine_name}' already has replication enabled (State: {replication_state})"
+                suggested_action = "Replication is already configured for this machine. If you need to reconfigure, disable replication first before re-enabling."
+            elif not is_healthy:
                 status = ValidationStatus.WARNING
                 message = f"Machine discovered but has health issues: {'; '.join(health_issues)}"
                 suggested_action = "Check discovery agent status and network connectivity"
@@ -186,6 +211,79 @@ class DiscoveryValidator:
             return None
             
         except Exception:
+            return None
+
+    def _check_replication_status(
+        self,
+        config: MachineConfig,
+        migrate_project_rg: str,
+        migrate_project_name: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Check if replication is already enabled for the machine
+
+        Args:
+            config: Machine configuration
+            migrate_project_rg: Azure Migrate project resource group
+            migrate_project_name: Azure Migrate project name
+
+        Returns:
+            Dictionary with replication status or None if not replicated
+        """
+        try:
+            api_client = self._get_api_client(config.target_subscription)
+            
+            # Try to get replication status for common vault/fabric naming patterns
+            # Note: In a real implementation, you'd need to know the actual vault name
+            # This is a simplified check that looks for replication items
+            
+            # Try to list protected items in the subscription
+            # If we find a match for this machine name, replication is enabled
+            path = f"/subscriptions/{config.target_subscription}/resourceGroups/{migrate_project_rg}/providers/Microsoft.RecoveryServices/vaults"
+            
+            try:
+                vaults_response = api_client.get(path, api_version="2022-10-01")
+                vaults = vaults_response.get("value", []) if vaults_response else []
+                
+                for vault in vaults:
+                    vault_name = vault.get("name", "")
+                    
+                    # Check for protected items in this vault
+                    protected_items_path = f"{vault.get('id', '')}/replicationProtectedItems"
+                    try:
+                        items_response = api_client.get(protected_items_path, api_version="2022-10-01")
+                        items = items_response.get("value", []) if items_response else []
+                        
+                        for item in items:
+                            # Check if this item matches our machine
+                            item_props = item.get("properties", {})
+                            friendly_name = item_props.get("friendlyName", "")
+                            
+                            if friendly_name.lower() == config.target_machine_name.lower():
+                                # Found a match - replication is enabled
+                                replication_health = item_props.get("replicationHealth", "Unknown")
+                                protection_state = item_props.get("protectionState", "Unknown")
+                                
+                                return {
+                                    "enabled": True,
+                                    "state": protection_state,
+                                    "health": replication_health,
+                                    "vault_name": vault_name,
+                                    "item_name": item.get("name", "")
+                                }
+                    except Exception:
+                        # Vault might not have replication items or we don't have access
+                        continue
+                        
+                # No matching replication item found
+                return {"enabled": False}
+                
+            except Exception:
+                # Couldn't list vaults, assume replication not enabled
+                return {"enabled": False}
+                
+        except Exception:
+            # Error checking replication status, return None
             return None
 
     def _extract_discovery_info(self, machine_data: Dict[str, Any]) -> Dict[str, Any]:
