@@ -2,6 +2,32 @@
 
 All notable changes to the Azure Bulk Migration Tool will be documented in this file.
 
+## [3.0.1] - 2025-01-XX
+
+### 🧹 Codebase Cleanup
+
+#### Removed Modules (~2,200 lines)
+- **intelligent_validator.py** (480 lines) - Replaced by `validators/wrappers/intelligent_servers_wrapper.py`
+- **formatters/** module (323+ lines) - Formatting now handled directly in validators using Rich library
+  - `formatters/__init__.py`
+  - `formatters/table_formatter.py` (EnhancedTableFormatter class)
+- **utils/error_context.py** (365 lines) - ErrorContext/ErrorCategory/ErrorContextBuilder classes (never used)
+- **utils/retry_logic.py** (389 lines) - RetryConfig/RetryHandler classes (planned feature, never implemented)
+- **utils/progress_tracker.py** (349 lines) - ValidationCheckpoint/ProgressTracker classes (never integrated)
+
+#### Updated Files
+- **azmig_tool/__init__.py** - Removed formatters imports and exports
+- **README.md** - Updated project structure and removed retry logic from features list
+- **docs/ARCHITECTURE.md** - Removed all references to deleted modules, fixed documentation corruption
+
+#### Impact
+- Simplified codebase with only actively-used modules
+- Reduced maintenance burden
+- Cleaner API surface in `__init__.py`
+- All existing functionality preserved
+
+---
+
 ## [1.0.0-dev] - 2025-10-07
 
 ### 🏗️ Initial Development Release

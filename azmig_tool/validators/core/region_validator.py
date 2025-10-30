@@ -9,7 +9,7 @@ Handles validation of Azure regions:
 """
 from typing import List, Optional
 from azure.core.credentials import TokenCredential
-from azure.mgmt.resource import ResourceManagementClient
+from azure.mgmt.resource import ResourceManagementClient, SubscriptionClient
 from azure.mgmt.compute import ComputeManagementClient
 
 from ...core.models import (
@@ -40,6 +40,13 @@ class RegionValidator:
         self.credential = credential
         self._resource_clients = {}
         self._compute_clients = {}
+        self._subscription_client = None
+
+    def _get_subscription_client(self) -> SubscriptionClient:
+        """Get or create cached SubscriptionClient"""
+        if self._subscription_client is None:
+            self._subscription_client = SubscriptionClient(self.credential)
+        return self._subscription_client
 
     def _get_resource_client(self, subscription_id: str) -> ResourceManagementClient:
         """Get or create cached ResourceManagementClient"""
@@ -71,9 +78,10 @@ class RegionValidator:
             # Get resource and compute clients
             resource_client = self._get_resource_client(config.target_subscription)
             compute_client = self._get_compute_client(config.target_subscription)
+            subscription_client = self._get_subscription_client()
 
             # Check if region is available
-            available_locations = resource_client.subscriptions.list_locations(
+            available_locations = subscription_client.subscriptions.list_locations(
                 config.target_subscription
             )
 

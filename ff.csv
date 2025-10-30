@@ -1,2 +1,0 @@
-Target Machine,Target Region,Target Subscription,Target RG,Target VNet,Target Subnet,Target Machine SKU,Target Disk Type,Migrate Project Name
-D-DC1-QVIEW03,uksouth,b645b354-11fb-4f23-b006-856c378dd73a,u-uks-tradevtest-migration-rg-01,u-uks-tra-vnet-01,Qlik,Standard_DS1_v2,Premium_LRS,"p-az1-migrate04	"

@@ -614,6 +614,7 @@ class CachedInteractiveCredential(TokenCredential):
         self.project_manager = project_manager
         self.project_config = project_config
         self._interactive_credential = None
+        self._cache_message_shown = False  # Track if we've shown the cache message
 
     def get_token(self, *scopes: str, **kwargs) -> AccessToken:
         """
@@ -628,7 +629,10 @@ class CachedInteractiveCredential(TokenCredential):
         """
         # First, check if we have a valid cached token
         if self.project_auth.is_token_valid() and self.project_auth.cached_token and self.project_auth.token_expires_at:
-            console.print("[dim]ℹ️ Using cached authentication token...[/dim]")
+            # Show message only once per session
+            if not self._cache_message_shown:
+                console.print("[dim]ℹ️ Using cached authentication token...[/dim]")
+                self._cache_message_shown = True
 
             # Create AccessToken from cached data
             expires_at = datetime.fromisoformat(

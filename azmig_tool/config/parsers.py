@@ -133,12 +133,12 @@ class ConfigParser:
                                v in row.items()}
 
                         config = MigrateProjectConfig(
-                            subscription_id=row.get("Subscription ID", ""),
+                            subscription_id=row.get("APP Subscription ID", ""),
                             migrate_project_name=row.get(
                                 "Migrate Project Name", ""),
                             appliance_type=row.get("Appliance Type", "Other"),
                             appliance_name=row.get("Appliance Name", ""),
-                            region=row.get("Region", ""),
+                            region=row.get("APP TARGET REGION", ""),
                             cache_storage_account=row.get(
                                 "Cache Storage Account", ""),
                             cache_storage_resource_group=row.get(
@@ -154,7 +154,7 @@ class ConfigParser:
                         # Validate required fields
                         if not config.subscription_id:
                             console.print(
-                                f"[yellow]⚠ Row {idx}: Missing Subscription ID, skipping[/yellow]")
+                                f"[yellow]⚠ Row {idx}: Missing APP Subscription ID, skipping[/yellow]")
                             continue
 
                         if not config.migrate_project_name:
@@ -295,11 +295,11 @@ class ConfigParser:
 
                 for config in configs:
                     writer.writerow({
-                        "Subscription ID": config.subscription_id,
+                        "APP Subscription ID": config.subscription_id,
                         "Migrate Project Name": config.migrate_project_name,
                         "Appliance Type": config.appliance_type,
                         "Appliance Name": config.appliance_name,
-                        "Region": config.region,
+                        "APP TARGET REGION": config.region,
                         "Cache Storage Account": config.cache_storage_account,
                         "Cache Storage Resource Group": config.cache_storage_resource_group,
                         "Migrate Project Subscription": config.migrate_project_subscription,

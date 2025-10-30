@@ -11,7 +11,6 @@ A comprehensive Python CLI tool for bulk server migration from on-premises to Az
 - **⚙️ Configuration-Driven**: Flexible validation profiles and customizable rules
 - **🔒 Secure Authentication**: Multiple auth methods (Azure CLI, Service Principal, Managed Identity)
 - **📈 Progress Tracking**: Real-time validation progress with detailed status updates
-- **🔄 Retry Logic**: Intelligent retry mechanisms for Azure API calls
 
 ## 📋 Requirements
 
@@ -276,13 +275,14 @@ azmig --auth-method service_principal
 azmig_tool/
 ├── core/              # Core business logic and models
 ├── interface/         # CLI, wizard, and user interaction
-├── utils/             # Utilities (auth, retry, errors, progress)  
+├── utils/             # Authentication utilities
 ├── management/        # Project and template management
 ├── config/            # Configuration parsing and validation
 ├── validators/        # Validation engine with core validators and wrappers
-├── clients/           # Azure API clients
-├── base/              # Base interfaces and contracts
-└── formatters/        # Output formatting and tables
+│   ├── core/          # Individual resource validators (region, vnet, vmsku, etc.)
+│   └── wrappers/      # Orchestration wrappers (landing zone, servers, intelligent)
+├── clients/           # Azure API clients (Azure Migrate, Resource Manager)
+└── base/              # Base interfaces and contracts
 ```
 
 ## 🚨 Common Issues & Solutions
@@ -324,7 +324,8 @@ azmig validate --excel-file servers.xlsx --profile quick
 ## 📖 Documentation
 
 - **[Architecture Guide](docs/ARCHITECTURE.md)** - Technical architecture and design patterns
-- **[User Guide](docs/USER_GUIDE.md)** - Complete usage guide with examples and workflows
+- **[Installation Guide](docs/INSTALLATION.md)** - Detailed installation steps (coming soon)
+- **[User Guide](docs/USER_GUIDE.md)** - Complete usage guide (coming soon)
 
 ## 🤝 Contributing
 

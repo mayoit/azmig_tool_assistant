@@ -64,7 +64,12 @@ class VNetValidator:
         try:
             network_client = self._get_network_client(config.target_subscription)
 
-            # Check if VNet exists
+            # First try to find VNet in the specified resource group
+            vnet = None
+            vnet_exists = False
+            vnet_location = None
+            actual_rg = config.target_rg
+            
             try:
                 vnet = network_client.virtual_networks.get(
                     config.target_rg,
@@ -73,8 +78,25 @@ class VNetValidator:
                 vnet_exists = True
                 vnet_location = vnet.location if hasattr(vnet, 'location') else None
             except Exception:
-                vnet_exists = False
-                vnet_location = None
+                # If not found in target RG, search entire subscription
+                try:
+                    all_vnets = network_client.virtual_networks.list_all()
+                    for v in all_vnets:
+                        if v.name == config.target_vnet:
+                            vnet = v
+                            vnet_exists = True
+                            vnet_location = v.location if hasattr(v, 'location') else None
+                            # Extract actual resource group from VNet ID
+                            # Format: /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Network/virtualNetworks/{vnet}
+                            if v.id:
+                                parts = v.id.split('/')
+                                if 'resourceGroups' in parts:
+                                    idx = parts.index('resourceGroups')
+                                    if idx + 1 < len(parts):
+                                        actual_rg = parts[idx + 1]
+                            break
+                except Exception:
+                    pass
 
             if not vnet_exists:
                 return VNetValidationResult(
@@ -89,32 +111,44 @@ class VNetValidator:
                     subnet_info=None,
                     region_match=False,
                     has_nsg=False,
-                    message=f"VNet '{config.target_vnet}' does not exist in resource group '{config.target_rg}'",
-                    suggested_action="Create the VNet or verify the VNet name and resource group"
+                    message=f"VNet '{config.target_vnet}' does not exist in subscription",
+                    suggested_action="Create the VNet or verify the VNet name"
                 )
 
-            # Check region alignment
-            region_match = True
+            # Check region alignment - CRITICAL validation
+            region_match = False
+            region_mismatch_message = ""
             if vnet_location and config.target_region:
                 normalized_vnet_region = self._normalize_region_name(vnet_location)
                 normalized_target_region = self._normalize_region_name(config.target_region)
                 region_match = normalized_vnet_region == normalized_target_region
+                
+                if not region_match:
+                    region_mismatch_message = f"VNet is in '{vnet_location}' but target region is '{config.target_region}'"
 
-            # Check if subnet exists
+            # Check if subnet exists and get detailed information
             subnet_exists = False
             subnet_info = None
             has_nsg = False
+            subnet_has_delegation = False
+            delegation_info = ""
 
-            if hasattr(vnet, 'subnets') and vnet.subnets:
+            if vnet and hasattr(vnet, 'subnets') and vnet.subnets:
                 for subnet in vnet.subnets:
                     if subnet.name == config.target_subnet:
                         subnet_exists = True
                         subnet_info = self._get_subnet_info(subnet)
                         has_nsg = subnet.network_security_group is not None
+                        
+                        # Check for subnet delegations
+                        if hasattr(subnet, 'delegations') and subnet.delegations:
+                            subnet_has_delegation = True
+                            delegation_names = [d.service_name for d in subnet.delegations if hasattr(d, 'service_name') and d.service_name]
+                            delegation_info = f"Subnet has delegations: {', '.join(delegation_names)}"
                         break
 
             if not subnet_exists:
-                available_subnets = [s.name for s in (vnet.subnets or []) if s.name]
+                available_subnets = [s.name for s in (vnet.subnets or []) if s.name] if vnet else []
                 return VNetValidationResult(
                     machine_name=config.target_machine_name,
                     vnet_name=config.target_vnet,
@@ -128,17 +162,70 @@ class VNetValidator:
                     region_match=region_match,
                     has_nsg=False,
                     message=f"Subnet '{config.target_subnet}' does not exist in VNet '{config.target_vnet}'",
-                    suggested_action=f"Create the subnet or use one of: {', '.join(available_subnets[:3])}"
+                    suggested_action=f"Create the subnet or use one of: {', '.join(available_subnets[:3]) if available_subnets else 'No subnets available'}"
                 )
 
             # Determine overall status and message
             issues = []
-            if not region_match:
-                issues.append(f"VNet is in '{vnet_location}' but target region is '{config.target_region}'")
+            
+            # Region mismatch is CRITICAL - should fail
+            if not region_match and region_mismatch_message:
+                return VNetValidationResult(
+                    machine_name=config.target_machine_name,
+                    vnet_name=config.target_vnet,
+                    subnet_name=config.target_subnet,
+                    resource_group=config.target_rg,
+                    subscription_id=config.target_subscription,
+                    status=ValidationStatus.FAILED,
+                    vnet_exists=True,
+                    subnet_exists=True,
+                    subnet_info=subnet_info,
+                    region_match=False,
+                    has_nsg=has_nsg,
+                    message=region_mismatch_message,
+                    suggested_action="Use a VNet in the correct target region"
+                )
+            
+            # Subnet delegation is CRITICAL - should fail
+            if subnet_has_delegation:
+                return VNetValidationResult(
+                    machine_name=config.target_machine_name,
+                    vnet_name=config.target_vnet,
+                    subnet_name=config.target_subnet,
+                    resource_group=config.target_rg,
+                    subscription_id=config.target_subscription,
+                    status=ValidationStatus.FAILED,
+                    vnet_exists=True,
+                    subnet_exists=True,
+                    subnet_info=subnet_info,
+                    region_match=region_match,
+                    has_nsg=has_nsg,
+                    message=f"{delegation_info}. VMs cannot be deployed to delegated subnets",
+                    suggested_action="Use a subnet without delegations or remove existing delegations"
+                )
+            
+            # Check for warnings
+            issues = []
             if not has_nsg:
                 issues.append("Subnet does not have a Network Security Group")
             if subnet_info and subnet_info.available_ips < 10:
                 issues.append(f"Subnet has only {subnet_info.available_ips} available IP addresses")
+            elif subnet_info and subnet_info.available_ips == 0:
+                return VNetValidationResult(
+                    machine_name=config.target_machine_name,
+                    vnet_name=config.target_vnet,
+                    subnet_name=config.target_subnet,
+                    resource_group=config.target_rg,
+                    subscription_id=config.target_subscription,
+                    status=ValidationStatus.FAILED,
+                    vnet_exists=True,
+                    subnet_exists=True,
+                    subnet_info=subnet_info,
+                    region_match=region_match,
+                    has_nsg=has_nsg,
+                    message="Subnet has no available IP addresses",
+                    suggested_action="Expand the subnet address space or use a different subnet"
+                )
 
             if issues:
                 status = ValidationStatus.WARNING

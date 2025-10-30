@@ -1212,29 +1212,41 @@ class MigrationWizard:
 
                         for mp_data in lz_configs["migrate_projects"]:
                             # Convert saved data to MigrateProjectConfig objects
+                            # Create one project config for each app_landing_zone to enable proper server matching
                             try:
-                                project_config = MigrateProjectConfig(
-                                    subscription_id=mp_data.get(
-                                        'Subscription ID', ''),
-                                    migrate_project_name=mp_data.get(
-                                        'Migrate Project Name', ''),
-                                    appliance_type=mp_data.get(
-                                        'Appliance Type', 'VMware'),
-                                    appliance_name=mp_data.get(
-                                        'Appliance Name', ''),
-                                    region=mp_data.get('Region', ''),
-                                    cache_storage_account=mp_data.get(
-                                        'Cache Storage Account', ''),
-                                    migrate_project_subscription=mp_data.get(
-                                        'Migrate Project Subscription', ''),
-                                    migrate_resource_group=mp_data.get(
-                                        'Migrate Resource Group', ''),
-                                    cache_storage_resource_group=mp_data.get(
-                                        'Cache Storage Resource Group', ''),
-                                    recovery_vault_name=mp_data.get(
-                                        'Recovery Vault Name')
-                                )
-                                landing_zone_projects.append(project_config)
+                                app_landing_zones = mp_data.get('app_landing_zones', [])
+                                
+                                if app_landing_zones:
+                                    # Create project config for each app landing zone
+                                    for alz in app_landing_zones:
+                                        project_config = MigrateProjectConfig(
+                                            subscription_id=alz.get('Subscription ID', ''),
+                                            migrate_project_name=mp_data.get('Migrate Project Name', ''),
+                                            appliance_type=mp_data.get('Appliance Type', 'VMware'),
+                                            appliance_name=mp_data.get('Appliance Name', ''),
+                                            region=alz.get('Region', ''),
+                                            cache_storage_account=alz.get('Cache Storage Account', ''),
+                                            migrate_project_subscription=mp_data.get('Migrate Project Subscription', ''),
+                                            migrate_resource_group=mp_data.get('Migrate Resource Group', ''),
+                                            cache_storage_resource_group=alz.get('Cache Storage Resource Group', ''),
+                                            recovery_vault_name=mp_data.get('Recovery Vault Name')
+                                        )
+                                        landing_zone_projects.append(project_config)
+                                else:
+                                    # Fallback: create single project config from main project data (legacy format)
+                                    project_config = MigrateProjectConfig(
+                                        subscription_id=mp_data.get('Subscription ID', ''),
+                                        migrate_project_name=mp_data.get('Migrate Project Name', ''),
+                                        appliance_type=mp_data.get('Appliance Type', 'VMware'),
+                                        appliance_name=mp_data.get('Appliance Name', ''),
+                                        region=mp_data.get('Region', ''),
+                                        cache_storage_account=mp_data.get('Cache Storage Account', ''),
+                                        migrate_project_subscription=mp_data.get('Migrate Project Subscription', ''),
+                                        migrate_resource_group=mp_data.get('Migrate Resource Group', ''),
+                                        cache_storage_resource_group=mp_data.get('Cache Storage Resource Group', ''),
+                                        recovery_vault_name=mp_data.get('Recovery Vault Name')
+                                    )
+                                    landing_zone_projects.append(project_config)
                             except Exception as e:
                                 console.print(
                                     f"[yellow]⚠ Warning: Could not load project config for {mp_data.get('Migrate Project Name', 'unknown')}: {str(e)}[/yellow]")

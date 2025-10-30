@@ -138,22 +138,33 @@ class IntelligentServersValidatorWrapper(ServersValidatorWrapper):
         """
         result = ProjectMatchResult(server_config=server)
         
-        # Step 1: Match by target region and subscription (since MachineConfig doesn't have migrate_project_name)
+        # Step 1: Exact match by migrate project name, region, and subscription
         matched_project = None
-        for project in self.landing_zone_projects:
-            # Match by target region and subscription
-            if (server.target_region.lower() == project.region.lower() and 
-                server.target_subscription == project.migrate_project_subscription):
-                matched_project = project
-                break
+        if hasattr(server, 'migrate_project_name') and server.migrate_project_name:
+            for project in self.landing_zone_projects:
+                # Perfect match: project name, region, and subscription all match
+                if (server.migrate_project_name == project.migrate_project_name and
+                    server.target_region.lower() == project.region.lower() and 
+                    server.target_subscription == project.subscription_id):
+                    matched_project = project
+                    break
         
+        # Step 2: Fallback - match by region and subscription only 
         if not matched_project:
-            # Try to find any project in the same region as fallback
+            for project in self.landing_zone_projects:
+                # Match by target region and subscription (from app_landing_zone)
+                if (server.target_region.lower() == project.region.lower() and 
+                    server.target_subscription == project.subscription_id):
+                    matched_project = project
+                    break
+        
+        # Step 3: Last resort - match by region only
+        if not matched_project:
             for project in self.landing_zone_projects:
                 if server.target_region.lower() == project.region.lower():
                     matched_project = project
                     result.validation_issues.append(
-                        f"Using fallback project '{project.migrate_project_name}' based on region match")
+                        f"Using fallback project '{project.migrate_project_name}' based on region match only")
                     break
         
         if not matched_project:
@@ -592,12 +603,12 @@ class IntelligentServersValidatorWrapper(ServersValidatorWrapper):
         
         table = Table(box=box.DOUBLE_EDGE, show_header=True, header_style="bold magenta")
         table.add_column("#", style="dim", width=3, justify="right")
-        table.add_column("Machine Name", style="cyan")
-        table.add_column("Project Match", style="green")
-        table.add_column("Discovery", style="blue", justify="center")
-        table.add_column("IP Address", style="yellow")
-        table.add_column("Datacenter", style="magenta")
-        table.add_column("Status", style="bold", justify="center")
+        table.add_column("Machine Name", style="cyan", no_wrap=True)
+        table.add_column("Project Match", style="green", no_wrap=True)
+        table.add_column("Discovery", style="blue", justify="center", no_wrap=True)
+        table.add_column("IP Address", style="yellow", no_wrap=True)
+        table.add_column("Status", style="bold", justify="center", no_wrap=True)
+        table.add_column("Reason", style="red", no_wrap=False)  # Allow wrapping to show full message
         
         for i, result in enumerate(results, 1):
             # Project match
@@ -608,19 +619,23 @@ class IntelligentServersValidatorWrapper(ServersValidatorWrapper):
             # Discovery status
             discovery_status = "❓ Unknown"
             ip_address = "Unknown"
-            datacenter = "Unknown"
             if result.discovery_info:
                 discovery_status = "✅ Yes" if result.discovery_info.discovered else "❌ No"
                 ip_address = result.discovery_info.ip_address or "Unknown"
-                datacenter = result.discovery_info.datacenter_location or "Unknown"
             
-            # Overall status
+            # Overall status and failure reason
+            reason = ""
             if result.overall_status == ValidationStatus.OK:
                 status = "[green]✅ Ready[/green]"
+                reason = "All validations passed"
             elif result.overall_status == ValidationStatus.WARNING:
                 status = "[yellow]⚠️ Issues[/yellow]"
+                # Get warning details from validation results
+                reason = self._get_first_issue_message(result, "warning")
             else:
                 status = "[red]❌ Failed[/red]"
+                # Get failure reason from validation results
+                reason = self._get_first_issue_message(result, "error")
             
             table.add_row(
                 str(i),
@@ -628,8 +643,47 @@ class IntelligentServersValidatorWrapper(ServersValidatorWrapper):
                 project_match,
                 discovery_status,
                 ip_address,
-                datacenter,
-                status
+                status,
+                reason
             )
         
         console.print(table)
+
+    def _get_first_issue_message(self, result: IntelligentServerValidationResult, issue_type: str) -> str:
+        """Get the first failure or warning message from validation results"""
+        # Check intelligent-specific validation results first
+        for validation_result in [result.project_match_result, result.discovery_result, 
+                                result.cache_storage_result, result.recovery_vault_result]:
+            if validation_result and hasattr(validation_result, 'message') and validation_result.message:
+                if issue_type == "error" and hasattr(validation_result, 'passed') and not validation_result.passed:
+                    return validation_result.message
+                elif issue_type == "warning" and hasattr(validation_result, 'passed') and validation_result.passed:
+                    # For warnings, check if there's a message even when passed
+                    if validation_result.message and "warning" in validation_result.message.lower():
+                        return validation_result.message
+        
+        # Check inherited validation results - these might have different structures
+        for validation_result in [result.region_result, result.resource_group_result,
+                                result.vnet_result, result.vmsku_result, result.disk_result, 
+                                result.rbac_result]:
+            if validation_result and hasattr(validation_result, 'message') and validation_result.message:
+                # Try to determine if it's a failure or warning based on available attributes
+                is_failed = False
+                is_warning = False
+                
+                if hasattr(validation_result, 'passed'):
+                    is_failed = not validation_result.passed
+                elif hasattr(validation_result, 'status'):
+                    is_failed = validation_result.status == ValidationStatus.FAILED
+                    is_warning = validation_result.status == ValidationStatus.WARNING
+                
+                if issue_type == "error" and is_failed:
+                    return validation_result.message
+                elif issue_type == "warning" and is_warning:
+                    return validation_result.message
+        
+        # Default messages if no specific issue found
+        if issue_type == "error":
+            return "Validation failed"
+        else:
+            return "No specific warnings found"

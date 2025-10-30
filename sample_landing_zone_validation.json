@@ -1,0 +1,64 @@
+{
+  "projects": [
+    {
+      "subscription_id": "4bf7f595-ef2c-42f9-b4e3-f2c49b080b25",
+      "migrate_project_name": "prod-migrate-project-01",
+      "appliance_type": "VMware",
+      "appliance_name": "vmware-appliance-01",
+      "region": "eastus",
+      "cache_storage_account": "migrate01cachest001",
+      "cache_storage_resource_group": "rg-migrate-cache-01",
+      "migrate_project_subscription": "4bf7f595-ef2c-42f9-b4e3-f2c49b080b25",
+      "migrate_resource_group": "rg-migrate-prod-01",
+      "recovery_vault_name": "prod-migrate-project-01-vault"
+    },
+    {
+      "subscription_id": "b645b354-11fb-4f23-b006-856c378dd73a",
+      "migrate_project_name": "dev-migrate-project-02",
+      "appliance_type": "Physical",
+      "appliance_name": "physical-appliance-01",
+      "region": "westus2",
+      "cache_storage_account": "migrate02cachest001",
+      "cache_storage_resource_group": "rg-migrate-cache-02",
+      "migrate_project_subscription": "b645b354-11fb-4f23-b006-856c378dd73a",
+      "migrate_resource_group": "rg-migrate-dev-02",
+      "recovery_vault_name": "dev-migrate-project-02-vault"
+    },
+    {
+      "subscription_id": "3c2e8b7a-9f4d-4e1a-8c5f-6d3e2a1b9c8d",
+      "migrate_project_name": "test-migrate-project-03",
+      "appliance_type": "HyperV",
+      "appliance_name": "hyperv-appliance-01",
+      "region": "uksouth",
+      "cache_storage_account": "migrate03cachest001",
+      "cache_storage_resource_group": "rg-migrate-cache-03",
+      "migrate_project_subscription": "3c2e8b7a-9f4d-4e1a-8c5f-6d3e2a1b9c8d",
+      "migrate_resource_group": "rg-migrate-test-03",
+      "recovery_vault_name": "test-migrate-project-03-vault"
+    },
+    {
+      "subscription_id": "7f5a2b8c-3e1d-4c7e-9b6a-2f8e1d4c7b9a",
+      "migrate_project_name": "stage-migrate-project-04",
+      "appliance_type": "Agentless",
+      "appliance_name": "agentless-appliance-01",
+      "region": "centralus",
+      "cache_storage_account": "migrate04cachest001",
+      "cache_storage_resource_group": "rg-migrate-cache-04",
+      "migrate_project_subscription": "7f5a2b8c-3e1d-4c7e-9b6a-2f8e1d4c7b9a",
+      "migrate_resource_group": "rg-migrate-stage-04",
+      "recovery_vault_name": "stage-migrate-project-04-vault"
+    },
+    {
+      "subscription_id": "1a3f5c8e-2b9d-4e6f-8a7c-5e2b9d6f8c1a",
+      "migrate_project_name": "dr-migrate-project-05",
+      "appliance_type": "Agent-based",
+      "appliance_name": "agent-appliance-01",
+      "region": "francecentral",
+      "cache_storage_account": "migrate05cachest001",
+      "cache_storage_resource_group": "rg-migrate-cache-05",
+      "migrate_project_subscription": "1a3f5c8e-2b9d-4e6f-8a7c-5e2b9d6f8c1a",
+      "migrate_resource_group": "rg-migrate-dr-05",
+      "recovery_vault_name": "dr-migrate-project-05-vault"
+    }
+  ]
+}
