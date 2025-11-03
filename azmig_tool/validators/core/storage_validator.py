@@ -71,7 +71,9 @@ class StorageValidator:
                     auto_created=False
                 )
 
-            storage_client = self._get_storage_client(config.subscription_id)
+            # Use cache_storage_subscription if provided, otherwise fall back to subscription_id
+            storage_subscription = config.cache_storage_subscription or config.subscription_id
+            storage_client = self._get_storage_client(storage_subscription)
 
             # Check if storage account exists
             try:

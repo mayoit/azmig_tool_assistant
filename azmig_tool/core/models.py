@@ -262,6 +262,7 @@ class MigrateProjectConfig:
     migrate_project_subscription: str  # Subscription where Migrate project resides
     migrate_resource_group: str
     cache_storage_resource_group: str  # Resource group for cache storage account
+    cache_storage_subscription: Optional[str] = None  # Subscription where cache storage resides (defaults to migrate_project_subscription)
     # Auto-discovered from migrate project, but accepting from CSV for compatibility
     recovery_vault_name: Optional[str] = None
 
