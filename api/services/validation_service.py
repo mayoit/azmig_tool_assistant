@@ -199,7 +199,8 @@ class ValidationService:
                 region = app_zones[0].get('Region', app_zones[0].get('region', 'eastus')) if app_zones else 'eastus'
                 cache_storage = app_zones[0].get('Cache Storage Account', app_zones[0].get('cacheStorageAccount', '')) if app_zones else ''
                 cache_rg = app_zones[0].get('Cache Storage Resource Group', app_zones[0].get('cacheStorageResourceGroup', '')) if app_zones else ''
-                cache_subscription = app_zones[0].get('Subscription', app_zones[0].get('subscription', '')) if app_zones else ''
+                # Support both "Subscription ID" and "Subscription" field names
+                cache_subscription = app_zones[0].get('Subscription ID', app_zones[0].get('Subscription', app_zones[0].get('subscription', ''))) if app_zones else ''
                 
                 config = MigrateProjectConfig(
                     subscription_id=mp.get('Migrate Project Subscription', mp.get('migrateProjectSubscription', '')),
