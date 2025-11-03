@@ -1,8 +1,75 @@
 # Azure Migration Tool 🚀
 
-A comprehensive Python CLI tool for bulk server migration from on-premises to Azure using Azure Migrate and Site Recovery. Features live Azure integration with intelligent validation and project matching.
+> **🎉 NEW: Web Application (v4.0) is NOW IN BETA!** Phase 2 complete with RESTful API, async validations, and Excel upload.
+
+A comprehensive tool for bulk server migration from on-premises to Azure using Azure Migrate and Site Recovery. 
+
+## 📱 Application Versions
+
+### Web Application (v4.0 - BETA) 🆕
+**Status:** Phase 2 Complete (95%) - Code Complete, Testing Pending
+
+Full three-tier web application with:
+- ✅ **PostgreSQL Database**: Persistent project and validation data
+- ✅ **FastAPI Backend**: RESTful API with 20 endpoints
+- ✅ **Celery Workers**: Background async validation processing
+- ✅ **Redis Queue**: Message broker for task distribution
+- ⏳ **Vue.js Frontend**: Coming in Phase 3
+
+**Key Features (v4.0):**
+- JWT-based authentication with role-based access control (admin/operator/viewer)
+- Project management with CRUD operations
+- Excel bulk upload for server configurations
+- Landing zone configuration management
+- Async validation jobs with real-time status tracking
+- Comprehensive validation results with summary statistics
+
+**Quick Start:**
+```bash
+# Start Docker containers
+docker-compose up -d
+
+# Seed test data
+docker exec -it azmig_api python seed_data.py
+
+# Access API docs
+http://localhost:8000/api/docs
+
+# Run end-to-end test
+.\tests\test_validation_workflow.ps1
+```
+
+[📖 View Phase 2 Completion Report →](docs/PHASE2_COMPLETION.md)  
+[📖 View API Reference →](docs/API_REFERENCE.md)  
+[📖 View Web App Architecture →](docs/WEB_APP_ARCHITECTURE.md)
+
+### CLI Tool (v3.x - STABLE)
+Command-line interface for migration validation and planning.
+
+**Quick Start:**
+```bash
+# Interactive wizard
+azmig
+
+# Direct validation
+azmig validate --excel-file servers.xlsx
+```
+
+---
 
 ## ✨ Features
+
+### Web App (v4.0)
+- **🔐 Authentication**: JWT tokens, password hashing, role-based access
+- **📂 Project Management**: CRUD operations with pagination and filtering
+- **📊 Excel Upload**: Bulk import server configurations (pandas-based)
+- **🏗️ Landing Zones**: Layer 1 validation configuration
+- **⚙️ Async Validation**: Celery background jobs with Redis broker
+- **📈 Progress Tracking**: Job status tracking (pending → running → completed)
+- **🔍 Detailed Results**: Landing zone + server validation results
+- **🛡️ Security**: Role-based permissions, owner-based access control
+
+### CLI (v3.x)
 
 - **🏗️ Two-Layer Validation**: Landing Zone (project-level) and Servers (machine-level) validation
 - **🧠 Intelligent Validation**: Automatic server-to-project matching with discovery integration

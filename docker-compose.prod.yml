@@ -1,0 +1,186 @@
+# Production Docker Compose Configuration
+# Usage: docker compose -f docker-compose.prod.yml up -d
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: azmig_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: azmig_db
+      POSTGRES_USER: azmig_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-azmig_secure_password}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U azmig_user -d azmig_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - azmig_network
+
+  # Redis for Celery task queue
+  redis:
+    image: redis:7-alpine
+    container_name: azmig_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_secure_password}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - azmig_network
+
+  # FastAPI Backend
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: azmig_api
+    restart: unless-stopped
+    working_dir: /app/api
+    environment:
+      DATABASE_URL: postgresql://azmig_user:${DB_PASSWORD:-azmig_secure_password}@db:5432/azmig_db
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secure_password}@redis:6379/0
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      API_WORKERS: 4
+      SECRET_KEY: ${SECRET_KEY:-change_this_to_a_random_secret_key_in_production}
+      ACCESS_TOKEN_EXPIRE_MINUTES: 30
+      REFRESH_TOKEN_EXPIRE_DAYS: 7
+      AZURE_SUBSCRIPTION_ID: ${AZURE_SUBSCRIPTION_ID:-}
+      AZURE_TENANT_ID: ${AZURE_TENANT_ID:-}
+      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
+      AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-}
+      ENVIRONMENT: production
+      DEBUG: false
+      PYTHONPATH: /app
+    volumes:
+      - ./api:/app/api
+      - ./azmig_tool:/app/azmig_tool
+      - uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - azmig_network
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
+
+  # Celery Worker for background tasks
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: azmig_celery_worker
+    restart: unless-stopped
+    working_dir: /app/api
+    environment:
+      DATABASE_URL: postgresql://azmig_user:${DB_PASSWORD:-azmig_secure_password}@db:5432/azmig_db
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secure_password}@redis:6379/0
+      AZURE_SUBSCRIPTION_ID: ${AZURE_SUBSCRIPTION_ID:-}
+      AZURE_TENANT_ID: ${AZURE_TENANT_ID:-}
+      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
+      AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-}
+      PYTHONPATH: /app
+    volumes:
+      - ./api:/app/api
+      - ./azmig_tool:/app/azmig_tool
+      - uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - azmig_network
+    command: celery -A workers.celery_app worker --loglevel=info --concurrency=4
+
+  # Celery Beat for scheduled tasks
+  celery_beat:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: azmig_celery_beat
+    restart: unless-stopped
+    working_dir: /app/api
+    environment:
+      DATABASE_URL: postgresql://azmig_user:${DB_PASSWORD:-azmig_secure_password}@db:5432/azmig_db
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secure_password}@redis:6379/0
+      PYTHONPATH: /app
+    volumes:
+      - ./api:/app/api
+      - ./azmig_tool:/app/azmig_tool
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - azmig_network
+    command: celery -A workers.celery_app beat --loglevel=info
+
+  # Production Frontend Builder (outputs to shared volume)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend.prod
+    container_name: azmig_frontend_builder
+    restart: "no"
+    volumes:
+      - frontend_dist:/app/dist
+    depends_on:
+      - api
+    networks:
+      - azmig_network
+    command: /bin/sh -c "cp -r /usr/share/nginx/html/* /app/dist/ && echo 'Frontend build copied' && exit 0"
+
+  # Nginx Reverse Proxy and Frontend Server
+  nginx:
+    image: nginx:alpine
+    container_name: azmig_nginx
+    restart: unless-stopped
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d/production.conf:/etc/nginx/conf.d/default.conf:ro
+      - frontend_dist:/usr/share/nginx/html:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - api
+      - frontend
+    networks:
+      - azmig_network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  uploads:
+    driver: local
+  frontend_dist:
+    driver: local
+
+networks:
+  azmig_network:
+    driver: bridge

@@ -2,6 +2,64 @@
 
 All notable changes to the Azure Bulk Migration Tool will be documented in this file.
 
+## [4.0.0] - 2025-XX-XX (Planned)
+
+### 🚀 Major Architectural Change: CLI to Web Application
+
+**Breaking Change**: Complete transformation from command-line tool to three-tier web application.
+
+#### New Three-Tier Architecture
+
+**1. Database Tier (PostgreSQL)**
+- Persistent storage for projects, configurations, and validation results
+- Tables: users, projects, landing_zone_configs, server_configs, validation_results, replication_status
+- Full schema documentation in `docs/WEB_APP_ARCHITECTURE.md`
+
+**2. API Tier (Python - FastAPI)**
+- RESTful API with JWT authentication
+- Reuses existing validator logic as API services
+- Background job processing with Celery + Redis
+- Excel file upload and processing
+- Project-scoped operations
+- WebSocket support for real-time validation progress
+
+**3. UI Tier (React + TypeScript)**
+- Modern web interface with Ant Design components
+- Project-centric navigation
+- Excel drag-and-drop upload
+- Real-time validation dashboards
+- Replication status monitoring
+- Interactive validation results tables
+
+#### Key Features
+- **Project Management**: Create, organize, and manage multiple migration projects
+- **Excel Upload**: Drag-and-drop server configuration Excel files
+- **Background Validation**: Long-running validations processed asynchronously
+- **Real-time Progress**: Live updates on validation job status
+- **Historical Results**: Persistent storage of all validation results
+- **Multi-user Support**: User authentication and project ownership
+- **Replication Tracking**: Monitor replication status for all servers
+
+#### API Endpoints (Preview)
+```
+GET/POST   /api/v1/projects
+GET/PUT    /api/v1/projects/{id}/landing-zone
+POST       /api/v1/projects/{id}/servers/upload
+POST       /api/v1/projects/{id}/servers/validate
+GET        /api/v1/projects/{id}/replication
+```
+
+#### Deployment
+- Containerized with Docker
+- Azure App Service or AKS deployment
+- Azure Database for PostgreSQL
+- Azure Blob Storage for file uploads
+- Azure Application Insights for monitoring
+
+See `docs/WEB_APP_ARCHITECTURE.md` for complete architectural details.
+
+---
+
 ## [3.0.1] - 2025-01-XX
 
 ### ✨ New Features
