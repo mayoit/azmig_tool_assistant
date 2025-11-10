@@ -14,6 +14,7 @@ from schemas.project import (
     ProjectCreate, ProjectUpdate, ProjectResponse, ProjectListResponse
 )
 from utils.security import get_current_user, require_admin
+from utils.default_migration_settings import get_default_migration_settings
 
 router = APIRouter()
 
@@ -106,14 +107,14 @@ async def create_project(
     
     - **name**: Project name (required)
     - **description**: Project description (optional)
-    - **azure_subscription_id**: Azure subscription ID (required)
+    - **azure_tenant_id**: Azure tenant ID (required)
     - **metadata_json**: Additional metadata (optional)
     """
     # Create new project
     new_project = Project(
         name=project_data.name,
         description=project_data.description,
-        azure_subscription_id=project_data.azure_subscription_id,
+        azure_tenant_id=project_data.azure_tenant_id,
         metadata_json=project_data.metadata_json,
         status=ProjectStatus.ACTIVE,
         owner_id=current_user.id,
@@ -245,3 +246,95 @@ async def delete_project(
     db.commit()
     
     return None
+
+
+@router.get("/{project_id}/migration-settings")
+async def get_migration_settings(
+    project_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get project migration settings (allowed regions, VM SKUs, disk types).
+    Returns default settings if not configured.
+    """
+    project = db.query(Project).filter(Project.id == project_id).first()
+    
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project {project_id} not found"
+        )
+    
+    # Check permissions
+    if current_user.role != "admin" and project.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to this project"
+        )
+    
+    metadata = project.metadata_json or {}
+    migration_settings = metadata.get('migration_settings', get_default_migration_settings())
+    
+    return migration_settings
+
+
+@router.put("/{project_id}/migration-settings")
+async def update_migration_settings(
+    project_id: int,
+    settings: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Update project migration settings.
+    Validates that at least one region is configured.
+    """
+    project = db.query(Project).filter(Project.id == project_id).first()
+    
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project {project_id} not found"
+        )
+    
+    # Check permissions
+    if current_user.role != "admin" and project.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to this project"
+        )
+    
+    # Validate settings structure
+    if not isinstance(settings.get('allowed_regions'), list):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="allowed_regions must be an array"
+        )
+    if not isinstance(settings.get('allowed_vm_skus'), list):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="allowed_vm_skus must be an array"
+        )
+    if not isinstance(settings.get('allowed_disk_types'), list):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="allowed_disk_types must be an array"
+        )
+    
+    # Validate at least one region
+    if len(settings['allowed_regions']) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one region is required"
+        )
+    
+    # Update metadata
+    metadata = project.metadata_json or {}
+    metadata['migration_settings'] = settings
+    project.metadata_json = metadata
+    
+    db.commit()
+    db.refresh(project)
+    
+    return settings

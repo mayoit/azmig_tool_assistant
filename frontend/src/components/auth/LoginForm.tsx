@@ -64,6 +64,21 @@ export const LoginForm: React.FC = () => {
     }
   };
 
+  const handleQuickAdminLogin = async () => {
+    setError('');
+    setIsLoading(true);
+
+    try {
+      // Login directly with admin credentials
+      await login('admin@example.com', 'admin123');
+      navigate('/dashboard');
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.detail || err.message || 'Login failed. Please try again.';
+      setError(errorMessage);
+      setIsLoading(false);
+    }
+  };
+
   const handleTogglePasswordVisibility = () => {
     setShowPassword((prev) => !prev);
   };
@@ -149,6 +164,26 @@ export const LoginForm: React.FC = () => {
         sx={{ mt: 1, py: 1.5 }}
       >
         {isLoading ? 'Signing in...' : 'Sign In'}
+      </Button>
+
+      {/* Quick Admin Login Button - Temporary */}
+      <Button
+        variant="outlined"
+        size="large"
+        fullWidth
+        disabled={isLoading}
+        onClick={handleQuickAdminLogin}
+        sx={{ 
+          py: 1.5,
+          borderColor: 'primary.main',
+          color: 'primary.main',
+          '&:hover': {
+            borderColor: 'primary.dark',
+            bgcolor: 'primary.50',
+          }
+        }}
+      >
+        🚀 Quick Admin Login (Dev)
       </Button>
 
       {/* Footer Links */}

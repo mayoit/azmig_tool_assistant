@@ -93,12 +93,12 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project }) => {
           {project.description || 'No description provided'}
         </Typography>
 
-        {/* Subscription */}
+        {/* Tenant ID */}
         <Box sx={{ mb: 2 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <CloudIcon fontSize="small" color="primary" />
             <Typography variant="caption" color="text.secondary" noWrap>
-              {project.azure_subscription_id}
+              {project.azure_tenant_id}
             </Typography>
           </Box>
         </Box>

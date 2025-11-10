@@ -17,6 +17,11 @@ class ServerConfigBase(BaseModel):
     target_subnet: str = Field(..., min_length=1, max_length=255, description="Target subnet")
     target_machine_sku: str = Field(..., min_length=1, max_length=100, description="Target VM SKU")
     target_disk_type: str = Field(..., min_length=1, max_length=50, description="Target disk type")
+    appliance_id: Optional[int] = Field(None, description="Array index reference to lz_migrate_projects (deprecated)")
+    appliance_name: Optional[str] = Field(None, max_length=255, description="Azure Migrate appliance name")
+    migrate_project_name: Optional[str] = Field(None, max_length=255, description="Azure Migrate project name")
+    cache_storage_account: Optional[str] = Field(None, max_length=255, description="Cache storage account name")
+    cache_storage_rg: Optional[str] = Field(None, max_length=255, description="Cache storage resource group")
 
 
 class ServerConfigCreate(ServerConfigBase):
@@ -34,6 +39,11 @@ class ServerConfigUpdate(BaseModel):
     target_subnet: Optional[str] = Field(None, min_length=1, max_length=255)
     target_machine_sku: Optional[str] = Field(None, min_length=1, max_length=100)
     target_disk_type: Optional[str] = Field(None, min_length=1, max_length=50)
+    appliance_id: Optional[int] = Field(None, description="Array index reference to lz_migrate_projects (deprecated)")
+    appliance_name: Optional[str] = Field(None, max_length=255, description="Azure Migrate appliance name")
+    migrate_project_name: Optional[str] = Field(None, max_length=255, description="Azure Migrate project name")
+    cache_storage_account: Optional[str] = Field(None, max_length=255, description="Cache storage account name")
+    cache_storage_rg: Optional[str] = Field(None, max_length=255, description="Cache storage resource group")
 
 
 class ServerConfigResponse(ServerConfigBase):

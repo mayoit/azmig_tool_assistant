@@ -90,14 +90,22 @@ class User(Base):
 
 
 class Project(Base):
-    """Migration projects table."""
+    """Migration projects table - Each project is tied to an Azure Tenant."""
     __tablename__ = "projects"
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
     status = Column(SQLEnum(ProjectStatus), default=ProjectStatus.ACTIVE, nullable=False)
-    azure_subscription_id = Column(String(255), nullable=False)
+    
+    # Azure Tenant - Required (multiple projects can belong to same tenant)
+    azure_tenant_id = Column(String(255), nullable=False, index=True)  # Azure AD Tenant ID
+    
+    # Azure Authentication
+    auth_method = Column(String(50), nullable=True)  # azure_cli, service_principal, managed_identity
+    auth_credentials = Column(JSON, nullable=True)  # Encrypted credentials storage (SP client_id, client_secret)
+    auth_token = Column(Text, nullable=True)  # Cached access token (encrypted)
+    auth_token_expires_at = Column(DateTime(timezone=True), nullable=True)
     
     # Ownership
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
@@ -107,7 +115,7 @@ class Project(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
     # Metadata
-    metadata_json = Column(JSON, nullable=True)  # Store custom project metadata
+    metadata_json = Column(JSON, nullable=True)  # Store custom project metadata (landing zones with subscriptions)
 
     # Relationships
     owner = relationship("User", back_populates="projects")
@@ -119,6 +127,7 @@ class Project(Base):
     # Indexes
     __table_args__ = (
         Index("idx_project_owner_status", "owner_id", "status"),
+        Index("idx_project_tenant", "azure_tenant_id"),
     )
 
     def __repr__(self):
@@ -203,6 +212,18 @@ class ServerConfig(Base):
     target_machine_sku = Column(String(100), nullable=False)
     target_disk_type = Column(String(50), nullable=False)
     
+    # Appliance selection - stores ID reference to Landing Zone migrate project
+    # Note: This is a logical reference, not a FK constraint since LZ data is in JSON
+    appliance_id = Column(Integer, nullable=True, index=True)
+    
+    # Auto-populated fields from selected appliance (denormalized for performance)
+    migrate_project_name = Column(String(255), nullable=True, index=True)
+    appliance_name = Column(String(255), nullable=True)
+    appliance_type = Column(String(50), nullable=True)
+    recovery_vault_name = Column(String(255), nullable=True)
+    cache_storage_account = Column(String(255), nullable=True)
+    cache_storage_rg = Column(String(255), nullable=True)
+    
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -220,6 +241,7 @@ class ServerConfig(Base):
         UniqueConstraint("project_id", "target_machine_name", name="uq_server_per_project"),
         Index("idx_server_project_name", "project_id", "target_machine_name"),
         Index("idx_server_region", "target_region"),
+        Index("idx_server_migrate_project", "migrate_project_name"),
     )
 
     def __repr__(self):
@@ -409,3 +431,139 @@ class ValidationJob(Base):
 
     def __repr__(self):
         return f"<ValidationJob(id={self.id}, type={self.job_type}, status={self.status})>"
+
+
+class ValidationEvent(Base):
+    """Validation event log table - Azure Activity Log style event logging."""
+    __tablename__ = "validation_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    validation_job_id = Column(Integer, ForeignKey("validation_jobs.id"), nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    
+    # Event identification
+    event_name = Column(String(100), nullable=False)  # e.g., "Access Validation", "Appliance Health Check"
+    event_category = Column(String(50), nullable=False)  # landing_zone, server, appliance, storage, quota
+    validation_type = Column(String(100), nullable=False)  # access, appliance, storage, quota, region, vnet, etc.
+    
+    # Target resource info
+    resource_type = Column(String(100), nullable=True)  # MigrateProject, AppLandingZone, ServerConfig
+    resource_name = Column(String(500), nullable=True)  # Name of the resource being validated
+    resource_id = Column(String(500), nullable=True)  # Azure resource ID if applicable
+    
+    # Event status
+    status = Column(SQLEnum(ValidationResultStatus), nullable=False)
+    operation_status = Column(String(20), nullable=False)  # Started, InProgress, Completed, Failed
+    
+    # Event details
+    message = Column(Text, nullable=True)  # Human-readable message
+    details = Column(JSON, nullable=True)  # Detailed validation results
+    error_message = Column(Text, nullable=True)  # Error if failed
+    
+    # Request/Response info (like Azure Activity Log)
+    request_payload = Column(JSON, nullable=True)  # What was being validated
+    response_payload = Column(JSON, nullable=True)  # Validation result details
+    
+    # Timestamps (Azure-style)
+    event_timestamp = Column(DateTime(timezone=True), server_default=func.now())  # When event occurred
+    submitted_at = Column(DateTime(timezone=True), nullable=True)  # When validation started
+    completed_at = Column(DateTime(timezone=True), nullable=True)  # When validation completed
+    duration_ms = Column(Integer, nullable=True)  # Duration in milliseconds
+    
+    # Relationships
+    validation_job = relationship("ValidationJob")
+    project = relationship("Project")
+    
+    # Indexes for fast querying (like Azure Activity Log filtering)
+    __table_args__ = (
+        Index("idx_event_job_timestamp", "validation_job_id", "event_timestamp"),
+        Index("idx_event_project_timestamp", "project_id", "event_timestamp"),
+        Index("idx_event_category_type", "event_category", "validation_type"),
+        Index("idx_event_status", "status"),
+        Index("idx_event_operation_status", "operation_status"),
+    )
+
+    def __repr__(self):
+        return f"<ValidationEvent(id={self.id}, name={self.event_name}, status={self.status}, operation={self.operation_status})>"
+
+
+class MigrateProjectValidation(Base):
+    """Stores validation results for individual Azure Migrate Projects."""
+    __tablename__ = "migrate_project_validations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    migrate_project_index = Column(Integer, nullable=False)  # Index in project's lz_migrate_projects array
+    
+    # Validation status
+    status = Column(SQLEnum(ValidationResultStatus), nullable=False)
+    
+    # Validation results (JSON structure matching ProjectReadinessResult)
+    access_result = Column(JSON, nullable=True)  # AccessValidationResult
+    appliance_result = Column(JSON, nullable=True)  # ApplianceHealthResult
+    storage_result = Column(JSON, nullable=True)  # StorageCacheResult
+    quota_result = Column(JSON, nullable=True)  # QuotaValidationResult
+    
+    # Summary
+    overall_status = Column(String(20), nullable=False)  # PASSED, WARNING, FAILED
+    error_message = Column(Text, nullable=True)
+    
+    # Timestamps
+    started_at = Column(DateTime(timezone=True), nullable=False)
+    completed_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships
+    project = relationship("Project", backref="migrate_project_validations")
+    
+    # Constraints
+    __table_args__ = (
+        UniqueConstraint("project_id", "migrate_project_index", name="uq_project_mp_index"),
+        Index("idx_mp_validation_project", "project_id"),
+        Index("idx_mp_validation_status", "status"),
+    )
+
+    def __repr__(self):
+        return f"<MigrateProjectValidation(id={self.id}, project_id={self.project_id}, index={self.migrate_project_index}, status={self.status})>"
+
+
+class AppLandingZoneValidation(Base):
+    """Stores validation results for individual Application Landing Zones within Migrate Projects."""
+    __tablename__ = "app_landing_zone_validations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    migrate_project_index = Column(Integer, nullable=False)  # Parent migrate project index
+    app_lz_index = Column(Integer, nullable=False)  # Index in app_landing_zones array
+    
+    # Validation status
+    status = Column(SQLEnum(ValidationResultStatus), nullable=False)
+    
+    # Validation results (JSON structure)
+    subscription_access = Column(JSON, nullable=True)  # Subscription access validation
+    region_validation = Column(JSON, nullable=True)  # Region availability
+    storage_account_validation = Column(JSON, nullable=True)  # Cache storage account
+    resource_group_validation = Column(JSON, nullable=True)  # Resource group access
+    
+    # Summary
+    overall_status = Column(String(20), nullable=False)  # PASSED, WARNING, FAILED
+    error_message = Column(Text, nullable=True)
+    
+    # Timestamps
+    started_at = Column(DateTime(timezone=True), nullable=False)
+    completed_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships
+    project = relationship("Project", backref="app_landing_zone_validations")
+    
+    # Constraints
+    __table_args__ = (
+        UniqueConstraint("project_id", "migrate_project_index", "app_lz_index", name="uq_project_mp_alz_index"),
+        Index("idx_alz_validation_project", "project_id"),
+        Index("idx_alz_validation_status", "status"),
+    )
+
+    def __repr__(self):
+        return f"<AppLandingZoneValidation(id={self.id}, project_id={self.project_id}, mp_index={self.migrate_project_index}, alz_index={self.app_lz_index}, status={self.status})>"
+

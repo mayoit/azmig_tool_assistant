@@ -8,18 +8,8 @@ import {
   Checkbox,
   CircularProgress,
   FormControlLabel,
-  IconButton,
   InputAdornment,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TablePagination,
-  TableRow,
   TextField,
-  Tooltip,
   Typography,
 } from '@mui/material';
 import {
@@ -33,6 +23,7 @@ import { projectsService } from '../services/projects.service';
 import { serversService } from '../services/servers.service';
 import type { ServerConfig } from '../types/server.types';
 import type { PaginatedResponse } from '../types/api.types';
+import EditableServerTable from '../components/servers/EditableServerTable';
 
 export default function ServersPage() {
   const { id } = useParams<{ id: string }>();
@@ -42,8 +33,6 @@ export default function ServersPage() {
 
   const projectId = id ? Number(id) : undefined;
 
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
   const [searchTerm, setSearchTerm] = useState('');
   const [updateExisting, setUpdateExisting] = useState(false);
   const [uploadFeedback, setUploadFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -63,11 +52,11 @@ export default function ServersPage() {
     isLoading: serversLoading,
     error: serversError,
   } = useQuery<PaginatedResponse<ServerConfig>>({
-    queryKey: ['servers', projectId, page, rowsPerPage],
+    queryKey: ['servers', projectId],
     queryFn: () =>
       serversService.getAll(projectId!, {
-        page: page + 1,
-        limit: rowsPerPage,
+        page: 1,
+        limit: 100, // Get more servers for inline editing
       }),
     enabled: !!projectId,
   });
@@ -84,6 +73,39 @@ export default function ServersPage() {
     },
     onError: () => {
       setUploadFeedback({ type: 'error', message: 'Failed to upload servers. Please verify the file format and try again.' });
+    },
+  });
+
+  const createServerMutation = useMutation({
+    mutationFn: (data: Partial<ServerConfig>) =>
+      serversService.create(projectId!, {
+        target_machine_name: data.target_machine_name || '',
+        target_region: data.target_region || '',
+        target_subscription: data.target_subscription || '',
+        target_resource_group: data.target_resource_group || '',
+        target_vnet: data.target_vnet || '',
+        target_subnet: data.target_subnet || '',
+        target_machine_sku: data.target_machine_sku || '',
+        target_disk_type: data.target_disk_type || '',
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['servers', projectId] });
+      setUploadFeedback({ type: 'success', message: 'Server created successfully.' });
+    },
+    onError: () => {
+      setUploadFeedback({ type: 'error', message: 'Failed to create server.' });
+    },
+  });
+
+  const updateServerMutation = useMutation({
+    mutationFn: ({ serverId, data }: { serverId: number; data: Partial<ServerConfig> }) =>
+      serversService.update(serverId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['servers', projectId] });
+      setUploadFeedback({ type: 'success', message: 'Server updated successfully.' });
+    },
+    onError: () => {
+      setUploadFeedback({ type: 'error', message: 'Failed to update server.' });
     },
   });
 
@@ -123,6 +145,20 @@ export default function ServersPage() {
     );
   }, [serverData, searchTerm]);
 
+  // Extract landing zone appliances with logging
+  const landingZoneAppliances = useMemo(() => {
+    console.log('[ServersPage] Computing landingZoneAppliances...');
+    console.log('[ServersPage] project:', project);
+    console.log('[ServersPage] project?.metadata_json:', project?.metadata_json);
+    
+    // Only use metadata_json as the single source of truth
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const appliances = (project?.metadata_json as any)?.lz_migrate_projects || [];
+    
+    console.log('[ServersPage] Computed appliances:', appliances);
+    return appliances;
+  }, [project]);
+
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file && projectId) {
@@ -135,25 +171,10 @@ export default function ServersPage() {
     fileInputRef.current?.click();
   };
 
-  const handleDelete = (serverId: number) => {
-    if (window.confirm('Are you sure you want to delete this server?')) {
-      deleteMutation.mutate(serverId);
-    }
-  };
-
   const handleDeleteAll = () => {
     if (window.confirm('This will delete all servers for this project. Continue?')) {
       deleteAllMutation.mutate();
     }
-  };
-
-  const handleChangePage = (_event: unknown, newPage: number) => {
-    setPage(newPage);
-  };
-
-  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
   };
 
   if (!projectId) {
@@ -278,78 +299,23 @@ export default function ServersPage() {
           <CircularProgress />
         </Box>
       ) : (
-        <Paper>
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Region</TableCell>
-                  <TableCell>Subscription</TableCell>
-                  <TableCell>Resource Group</TableCell>
-                  <TableCell>VNet / Subnet</TableCell>
-                  <TableCell>SKU</TableCell>
-                  <TableCell>Disk Type</TableCell>
-                  <TableCell align="right">Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {filteredServers.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} align="center">
-                      <Typography variant="body2" color="text.secondary">
-                        {searchTerm ? 'No servers match your search criteria.' : 'No servers uploaded yet.'}
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredServers.map((server: ServerConfig) => (
-                    <TableRow key={server.id} hover>
-                      <TableCell>{server.target_machine_name}</TableCell>
-                      <TableCell>{server.target_region}</TableCell>
-                      <TableCell>
-                        <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                          {server.target_subscription}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>{server.target_resource_group}</TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
-                          {server.target_vnet} / {server.target_subnet}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>{server.target_machine_sku}</TableCell>
-                      <TableCell>{server.target_disk_type}</TableCell>
-                      <TableCell align="right">
-                        <Tooltip title="Delete server">
-                          <span>
-                            <IconButton
-                              size="small"
-                              color="error"
-                              onClick={() => handleDelete(server.id)}
-                              disabled={deleteMutation.isPending}
-                            >
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
-                          </span>
-                        </Tooltip>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-          <TablePagination
-            component="div"
-            count={serverData?.total ?? 0}
-            page={page}
-            rowsPerPage={rowsPerPage}
-            onPageChange={handleChangePage}
-            onRowsPerPageChange={handleChangeRowsPerPage}
-            rowsPerPageOptions={[5, 10, 25, 50]}
-          />
-        </Paper>
+        <EditableServerTable
+          servers={filteredServers}
+          onAddServer={async (data) => {
+            console.log('[ServersPage] Project object:', project);
+            console.log('[ServersPage] project.lz_migrate_projects:', project?.lz_migrate_projects);
+            console.log('[ServersPage] project.metadata_json:', project?.metadata_json);
+            await createServerMutation.mutateAsync(data);
+          }}
+          onUpdateServer={async (serverId, updates) => {
+            await updateServerMutation.mutateAsync({ serverId, data: updates });
+          }}
+          onDeleteServer={async (serverId) => {
+            await deleteMutation.mutateAsync(serverId);
+          }}
+          isLoading={serversLoading}
+          landingZoneAppliances={landingZoneAppliances}
+        />
       )}
     </Box>
   );

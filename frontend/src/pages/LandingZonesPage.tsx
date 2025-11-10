@@ -50,7 +50,7 @@ export default function LandingZonesPage() {
     const normalizedSearch = searchTerm.toLowerCase();
     return (
       project.name.toLowerCase().includes(normalizedSearch) ||
-      project.azure_subscription_id.toLowerCase().includes(normalizedSearch)
+      project.azure_tenant_id.toLowerCase().includes(normalizedSearch)
     );
   });
 
@@ -149,7 +149,7 @@ export default function LandingZonesPage() {
                     </TableCell>
                     <TableCell>
                       <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.875rem' }}>
-                        {project.azure_subscription_id}
+                        {project.azure_tenant_id}
                       </Typography>
                     </TableCell>
                     <TableCell>
@@ -218,10 +218,10 @@ export default function LandingZonesPage() {
             <Stack spacing={2}>
               <Box>
                 <Typography variant="subtitle2" color="text.secondary">
-                  Subscription
+                  Tenant ID
                 </Typography>
                 <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                  {selectedProject.azure_subscription_id}
+                  {selectedProject.azure_tenant_id}
                 </Typography>
               </Box>
 

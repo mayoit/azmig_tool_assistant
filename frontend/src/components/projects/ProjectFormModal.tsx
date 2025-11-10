@@ -27,8 +27,8 @@ const projectSchema = z.object({
     .max(1000, 'Description must be less than 1000 characters')
     .optional()
     .or(z.literal('')),
-  azure_subscription_id: z.string()
-    .min(1, 'Azure Subscription ID is required')
+  azure_tenant_id: z.string()
+    .min(1, 'Azure Tenant ID is required')
     .uuid('Must be a valid UUID (e.g., 12345678-1234-1234-1234-123456789012)'),
 });
 
@@ -61,7 +61,7 @@ const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
     defaultValues: {
       name: initialData?.name || '',
       description: initialData?.description || '',
-      azure_subscription_id: initialData?.azure_subscription_id || '',
+      azure_tenant_id: initialData?.azure_tenant_id || '',
     },
   });
 
@@ -165,19 +165,19 @@ const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
             )}
           />
 
-          {/* Azure Subscription ID */}
+          {/* Azure Tenant ID */}
           <Controller
-            name="azure_subscription_id"
+            name="azure_tenant_id"
             control={control}
             render={({ field }) => (
               <TextField
                 {...field}
-                label="Azure Subscription ID"
+                label="Azure Tenant ID"
                 required
                 fullWidth
-                error={!!errors.azure_subscription_id}
+                error={!!errors.azure_tenant_id}
                 helperText={
-                  errors.azure_subscription_id?.message ||
+                  errors.azure_tenant_id?.message ||
                   'UUID format: 12345678-1234-1234-1234-123456789012'
                 }
                 placeholder="00000000-0000-0000-0000-000000000000"

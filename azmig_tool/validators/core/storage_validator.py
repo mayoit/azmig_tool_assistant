@@ -73,6 +73,16 @@ class StorageValidator:
 
             # Use cache_storage_subscription if provided, otherwise fall back to subscription_id
             storage_subscription = config.cache_storage_subscription or config.subscription_id
+            
+            # Debug logging
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"Storage validation - Subscription: {storage_subscription}")
+            logger.info(f"Storage validation - Resource Group: {config.cache_storage_resource_group}")
+            logger.info(f"Storage validation - Storage Account: {config.cache_storage_account}")
+            logger.info(f"Storage validation - cache_storage_subscription: {config.cache_storage_subscription}")
+            logger.info(f"Storage validation - subscription_id: {config.subscription_id}")
+            
             storage_client = self._get_storage_client(storage_subscription)
 
             # Check if storage account exists

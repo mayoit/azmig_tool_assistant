@@ -20,6 +20,7 @@ redis==5.0.1
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 bcrypt==4.1.1
+cryptography==41.0.7
 
 # Environment variables
 python-dotenv==1.0.0

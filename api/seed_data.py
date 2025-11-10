@@ -59,7 +59,7 @@ def seed_users(db):
 
 
 def seed_projects(db, users):
-    """Create test projects."""
+    """Create test projects - each tied to an Azure Tenant."""
     admin_user = next(u for u in users if u.role == UserRole.ADMIN)
     operator_user = next(u for u in users if u.role == UserRole.OPERATOR)
     
@@ -67,37 +67,43 @@ def seed_projects(db, users):
         {
             "name": "Production Migration - Phase 1",
             "description": "Migrate 50 production servers from on-premises to Azure East US",
-            "azure_subscription_id": "12345678-1234-1234-1234-123456789012",
+            "azure_tenant_id": "12345678-1234-1234-1234-123456789012",  # Tenant ID instead of subscription
             "owner_id": admin_user.id,
             "status": ProjectStatus.ACTIVE,
             "metadata_json": {
-                "target_region": "East US",
-                "server_count": 50,
-                "migration_start": "2024-01-15"
+                "lz_migrate_projects": [],  # Landing zones with subscriptions will be added via UI
+                "project_settings": {
+                    "allowed_regions": ["East US", "West US 2", "Central US"],
+                    "allowed_vm_skus": ["Standard_D2s_v3", "Standard_D4s_v3", "Standard_D8s_v3"]
+                }
             }
         },
         {
             "name": "Dev/Test Environment",
             "description": "Development and testing environment for Azure migration",
-            "azure_subscription_id": "87654321-4321-4321-4321-210987654321",
+            "azure_tenant_id": "87654321-4321-4321-4321-210987654321",  # Different tenant
             "owner_id": operator_user.id,
             "status": ProjectStatus.ACTIVE,
             "metadata_json": {
-                "target_region": "West US 2",
-                "server_count": 10,
-                "environment": "development"
+                "lz_migrate_projects": [],
+                "project_settings": {
+                    "allowed_regions": ["West US 2"],
+                    "allowed_vm_skus": ["Standard_B2s", "Standard_B4ms"]
+                }
             }
         },
         {
             "name": "DR Site Migration",
             "description": "Disaster recovery site migration - in progress",
-            "azure_subscription_id": "11111111-2222-3333-4444-555555555555",
+            "azure_tenant_id": "12345678-1234-1234-1234-123456789012",  # Same tenant as first project
             "owner_id": admin_user.id,
             "status": ProjectStatus.IN_PROGRESS,
             "metadata_json": {
-                "target_region": "Central US",
-                "server_count": 25,
-                "priority": "medium"
+                "lz_migrate_projects": [],
+                "project_settings": {
+                    "allowed_regions": ["Central US", "South Central US"],
+                    "allowed_vm_skus": ["Standard_D2s_v3", "Standard_D4s_v3"]
+                }
             }
         }
     ]

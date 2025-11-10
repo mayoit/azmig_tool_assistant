@@ -83,7 +83,11 @@ async def root():
 
 
 # Import and include routers
-from routers import auth, projects, servers, landing_zones, validations, dashboard, landing_zone_upload
+from routers import (
+    auth, projects, servers, landing_zones, validations, 
+    dashboard, landing_zone_upload, azure_auth, landing_zone_validation,
+    azure_resources
+)
 
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(dashboard.router, prefix="/api", tags=["Dashboard"])
@@ -92,6 +96,9 @@ app.include_router(servers.router, prefix="/api", tags=["Servers"])
 app.include_router(landing_zones.router, prefix="/api", tags=["Landing Zones"])
 app.include_router(landing_zone_upload.router, prefix="/api", tags=["Landing Zone Upload"])
 app.include_router(validations.router, prefix="/api", tags=["Validations"])
+app.include_router(azure_auth.router, prefix="/api", tags=["Azure Authentication"])
+app.include_router(azure_resources.router, prefix="/api", tags=["Azure Resources"])
+app.include_router(landing_zone_validation.router, tags=["Landing Zone Validation"])
 
 # TODO: Add replication router in future phases
 # from api.routers import replication

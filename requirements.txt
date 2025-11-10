@@ -11,3 +11,4 @@ azure-mgmt-recoveryservices
 azure-mgmt-storage
 azure-core
 requests
+cryptography

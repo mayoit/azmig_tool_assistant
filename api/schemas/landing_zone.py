@@ -3,7 +3,7 @@ Pydantic schemas for landing zone configuration endpoints.
 """
 
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, Dict, Any
 from datetime import datetime
 
 
@@ -29,6 +29,11 @@ class LandingZoneConfigResponse(LandingZoneConfigBase):
     project_id: int
     created_at: datetime
     updated_at: Optional[datetime]
+    
+    # Validation status fields
+    validation_status: Optional[str] = Field(None, description="Latest validation status (PASSED/WARNING/FAILED/SKIPPED)")
+    last_validated_at: Optional[datetime] = Field(None, description="Timestamp of last validation")
+    validation_results: Optional[Dict[str, Any]] = Field(None, description="Detailed validation results")
     
     class Config:
         from_attributes = True

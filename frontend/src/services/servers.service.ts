@@ -1,5 +1,5 @@
 import api from './api';
-import type { ServerConfig, ServerUploadResponse } from '../types/server.types';
+import type { ServerConfig, ServerConfigCreate, ServerUploadResponse } from '../types/server.types';
 import type { PaginationParams, PaginatedResponse } from '../types/api.types';
 
 export const serversService = {
@@ -26,6 +26,19 @@ export const serversService = {
       limit: data.page_size,
       pages: data.pages,
     };
+  },
+
+  create: async (projectId: number, serverData: ServerConfigCreate): Promise<ServerConfig> => {
+    const response = await api.post('/servers', {
+      project_id: projectId,
+      ...serverData,
+    });
+    return response.data;
+  },
+
+  update: async (serverId: number, serverData: Partial<ServerConfigCreate>): Promise<ServerConfig> => {
+    const response = await api.put(`/servers/${serverId}`, serverData);
+    return response.data;
   },
 
   uploadExcel: async (projectId: number, file: File, updateExisting = false): Promise<ServerUploadResponse> => {

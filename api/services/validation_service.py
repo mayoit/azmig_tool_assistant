@@ -6,8 +6,11 @@ This wraps the existing validators from azmig_tool/validators/wrappers for use i
 
 import sys
 import os
+import logging
 from typing import Dict, List, Any, Optional
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 # Add parent directory to path to import azmig_tool
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
@@ -54,8 +57,6 @@ class ValidationService:
             return credential
         except Exception as e:
             # Log and re-raise - don't fall back to default credential
-            import logging
-            logger = logging.getLogger(__name__)
             logger.error(f"Failed to get project {project_id} credential: {e}", exc_info=True)
             raise ValueError(f"Authentication failed for project {project_id}: {str(e)}")
     
@@ -192,15 +193,47 @@ class ValidationService:
             
             # Convert to MigrateProjectConfig list
             migrate_configs = []
+            skipped_configs = []  # Track configs marked as new
+            
             for mp in migrate_projects:
                 # Get first app landing zone for region info (or default)
                 # Support both camelCase and Title Case keys
                 app_zones = mp.get('appLandingZones', mp.get('app_landing_zones', []))
+                
+                # Check if this migrate project is marked as new resource
+                is_new_resource = False
+                if app_zones:
+                    # Check if any zone is marked as new
+                    is_new_resource = app_zones[0].get('isNewResource', False)
+                
+                # If marked as new, skip validation and create skipped event
+                if is_new_resource:
+                    migrate_project_name = mp.get('Migrate Project Name', mp.get('migrateProjectName', 'Unknown'))
+                    logger.info(f"  Skipping validation for new resource: {migrate_project_name}")
+                    
+                    # Create skipped validation event
+                    event = ValidationEvent(
+                        validation_job_id=validation_job.id,
+                        project_id=project_id,
+                        event_name=f"Landing Zone: {migrate_project_name}",
+                        event_category="landing_zone",
+                        validation_type="landing_zone_validation",
+                        resource_type="migrate_project",
+                        resource_name=migrate_project_name,
+                        status=ValidationResultStatus.SKIPPED,
+                        message="Resource marked as new - validation skipped",
+                        details="This landing zone is marked as a new resource that doesn't exist in Azure yet. Validation has been skipped.",
+                        event_timestamp=datetime.utcnow()
+                    )
+                    self.db.add(event)
+                    skipped_configs.append(migrate_project_name)
+                    continue
+                
                 region = app_zones[0].get('Region', app_zones[0].get('region', 'eastus')) if app_zones else 'eastus'
                 cache_storage = app_zones[0].get('Cache Storage Account', app_zones[0].get('cacheStorageAccount', '')) if app_zones else ''
                 cache_rg = app_zones[0].get('Cache Storage Resource Group', app_zones[0].get('cacheStorageResourceGroup', '')) if app_zones else ''
                 # Support both "Subscription ID" and "Subscription" field names
-                cache_subscription = app_zones[0].get('Subscription ID', app_zones[0].get('Subscription', app_zones[0].get('subscription', ''))) if app_zones else ''
+                cache_subscription = app_zones[0].get('Subscription ID', app_zones[0].get('Subscription', app_zones[0].get('subscriptionId', ''))) if app_zones else ''
                 
                 config = MigrateProjectConfig(
                     subscription_id=mp.get('Migrate Project Subscription', mp.get('migrateProjectSubscription', '')),
@@ -215,7 +248,34 @@ class ValidationService:
                     cache_storage_subscription=cache_subscription,  # App landing zone subscription
                     recovery_vault_name=mp.get('Recovery Vault Name', mp.get('recoveryVaultName', ''))
                 )
+                logger.info(f"  Created config with cache_storage_subscription: {config.cache_storage_subscription}")
                 migrate_configs.append(config)
+            
+            # If all configs are skipped, mark job as completed with skipped status
+            if not migrate_configs and skipped_configs:
+                logger.info(f"  All {len(skipped_configs)} migrate projects marked as new - skipping validation")
+                job = self.db.query(ValidationJob).filter(ValidationJob.id == job_id).first()
+                if job:
+                    job.total_items = len(skipped_configs)
+                    job.processed_items = len(skipped_configs)
+                    job.passed_items = 0
+                    job.failed_items = 0
+                    job.status = ValidationStatus.COMPLETED
+                    job.completed_at = datetime.utcnow()
+                
+                self.db.commit()
+                
+                return {
+                    "success": True,
+                    "all_passed": True,
+                    "total_validations": 0,
+                    "passed": 0,
+                    "failed": 0,
+                    "skipped": len(skipped_configs),
+                    "migrate_projects_validated": 0,
+                    "migrate_projects_skipped": len(skipped_configs),
+                    "message": "All landing zones marked as new - validation skipped"
+                }
             
             # Create validator with settings
             validator = LandingZoneValidatorWrapper(
@@ -223,7 +283,7 @@ class ValidationService:
                 validation_config=self.validation_config
             )
             
-            # Run validation
+            # Run validation only for non-skipped configs
             report = validator.validate_all(migrate_configs)
             
             total_validations = 0
@@ -321,10 +381,11 @@ class ValidationService:
             # Update job progress
             job = self.db.query(ValidationJob).filter(ValidationJob.id == job_id).first()
             if job:
-                job.total_items = total_validations
-                job.processed_items = total_validations
+                job.total_items = total_validations + len(skipped_configs)
+                job.processed_items = total_validations + len(skipped_configs)
                 job.passed_items = passed
                 job.failed_items = failed
+                # Note: skipped items are not explicitly tracked in job model yet
             
             self.db.commit()
             
@@ -334,7 +395,9 @@ class ValidationService:
                 "total_validations": total_validations,
                 "passed": passed,
                 "failed": failed,
-                "migrate_projects_validated": len(migrate_configs)
+                "skipped": len(skipped_configs),
+                "migrate_projects_validated": len(migrate_configs),
+                "migrate_projects_skipped": len(skipped_configs)
             }
             
         except Exception as e:

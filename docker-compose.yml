@@ -61,6 +61,7 @@ services:
       
       # Security
       SECRET_KEY: ${SECRET_KEY:-change_this_to_a_random_secret_key_in_production}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-fkFVP9aiW4gWe7Hh1V4zjlY7PBeo4sl2Z2wVrxIUjf0=}
       ACCESS_TOKEN_EXPIRE_MINUTES: 30
       REFRESH_TOKEN_EXPIRE_DAYS: 7
       
@@ -85,6 +86,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     networks:
       - azmig_network
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
@@ -101,6 +105,7 @@ services:
     environment:
       DATABASE_URL: postgresql://azmig_user:${DB_PASSWORD:-azmig_secure_password}@db:5432/azmig_db
       REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secure_password}@redis:6379/0
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-fkFVP9aiW4gWe7Hh1V4zjlY7PBeo4sl2Z2wVrxIUjf0=}
       AZURE_SUBSCRIPTION_ID: ${AZURE_SUBSCRIPTION_ID:-}
       AZURE_TENANT_ID: ${AZURE_TENANT_ID:-}
       AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
@@ -115,6 +120,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     networks:
       - azmig_network
     command: celery -A workers.celery_app worker --loglevel=info --concurrency=4

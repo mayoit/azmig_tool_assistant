@@ -10,7 +10,8 @@ from typing import Optional
 from database import get_db
 from models import (
     User, Project, ValidationJob, ValidationStatus,
-    LZValidationResult, ServerValidationResult, ServerConfig
+    LZValidationResult, ServerValidationResult, ServerConfig,
+    ValidationEvent
 )
 from schemas.validation import (
     ValidationJobResponse,
@@ -151,6 +152,46 @@ async def get_validation_job(
         )
     
     return job
+
+
+@router.get("/validations/{job_id}/events")
+async def get_validation_events(
+    job_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get detailed validation event log for a job (Azure Activity Log style).
+    
+    Returns individual events for each validation action (Access, Appliance, Storage, Quota)
+    with start/completion timestamps, request details, and results.
+    """
+    job = db.query(ValidationJob).filter(ValidationJob.id == job_id).first()
+    
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Validation job {job_id} not found"
+        )
+    
+    # Check permissions via project
+    project = db.query(Project).filter(Project.id == job.project_id).first()
+    if current_user.role != "admin" and project.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to this validation job"
+        )
+    
+    # Get all validation events for this job, ordered by timestamp
+    events = db.query(ValidationEvent).filter(
+        ValidationEvent.validation_job_id == job_id
+    ).order_by(ValidationEvent.event_timestamp.desc()).all()
+    
+    return {
+        "job_id": job_id,
+        "total_events": len(events),
+        "events": events
+    }
 
 
 @router.get("/validations/{job_id}/results", response_model=ValidationResultsResponse)

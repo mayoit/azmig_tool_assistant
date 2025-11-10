@@ -1,11 +1,21 @@
 export interface LandingZoneAppZone {
   subscriptionId: string;
-  cacheStorageAccount: string;
+  subscriptionName?: string;  // Display name for the subscription
   region: string;
+  cacheStorageAccount: string;
   cacheStorageResourceGroup: string;
+  allowedSkus?: string[];
+  isNewResource?: boolean;
+}
+
+export interface MigrationSettings {
+  allowed_regions: string[];
+  allowed_vm_skus: string[];
+  allowed_disk_types: string[];
 }
 
 export interface LandingZoneMigrateProject {
+  id?: number;  // Database ID for server appliance reference
   migrateProjectSubscription: string;
   migrateResourceGroup: string;
   migrateProjectName: string;
@@ -24,6 +34,17 @@ export interface ValidationSettings {
   landing_zone: {
     access_validation: {
       enabled: boolean;
+      checks: {
+        migrate_project_rbac: {
+          enabled: boolean;
+        };
+        recovery_vault_rbac: {
+          enabled: boolean;
+        };
+        subscription_rbac: {
+          enabled: boolean;
+        };
+      };
     };
     access_validation_checks: {
       migrate_project_rbac: {
@@ -76,7 +97,7 @@ export interface Project {
   id: number;
   name: string;
   description?: string;
-  azure_subscription_id: string;
+  azure_tenant_id: string;  // Changed from azure_subscription_id - each project belongs to a tenant
   status: 'active' | 'in_progress' | 'completed' | 'archived';
   metadata_json?: Record<string, unknown>;
   created_at: string;
@@ -93,21 +114,23 @@ export interface Project {
   };
   servers_count: number;
   validations_count: number;
-  lz_migrate_projects?: LandingZoneMigrateProject[];
+  lz_migrate_projects?: LandingZoneMigrateProject[];  // Each landing zone has its own subscriptionId
   landing_zone?: LandingZoneConfig;
   validation_settings?: ValidationSettings;
+  migration_settings?: MigrationSettings;
+  auth_method?: string;  // azure_cli, service_principal, managed_identity
 }
 
 export interface ProjectCreate {
   name: string;
   description?: string;
-  azure_subscription_id: string;
+  azure_tenant_id: string;  // Changed from azure_subscription_id - required tenant ID
 }
 
 export interface ProjectUpdate {
   name?: string;
   description?: string;
-  azure_subscription_id?: string;
+  azure_tenant_id?: string;  // Changed from azure_subscription_id
   is_active?: boolean;
 }
 

@@ -172,231 +172,441 @@ export default function ValidationEventLog({
           const failedEvents = jobEvents.filter(e => e.status === 'failed').length;
           
           return (
-            <Accordion
-              key={`job-${job.id}`}
-              expanded={expandedJob === `job-${job.id}`}
-              onChange={handleJobAccordionChange(`job-${job.id}`)}
-              elevation={2}
-              sx={{ 
-                border: 1, 
-                borderColor: 'divider',
-                '&:before': { display: 'none' } 
-              }}
-            >
-              <AccordionSummary 
-                expandIcon={<ExpandMoreIcon />}
-                sx={{ bgcolor: 'background.paper' }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, width: '100%' }}>
-                  {getStatusIcon(job.status)}
-                  <Box sx={{ flex: 1 }}>
-                    <Typography variant="body1" fontWeight="medium" sx={{ color: '#000' }}>
-                      Validation Job #{job.id}
-                      <Typography component="span" variant="caption" sx={{ ml: 1, color: '#666' }}>
-                        ({job.job_type})
-                      </Typography>
-                    </Typography>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-                      <AccessTimeIcon sx={{ fontSize: 14, color: '#666' }} />
-                      <Typography variant="caption" sx={{ color: '#666' }}>
-                        {formatDistanceToNow(new Date(job.created_at), { addSuffix: true })}
-                      </Typography>
-                      {jobEvents.length > 0 && (
-                        <Typography variant="caption" sx={{ color: '#666' }}>
-                          • {jobEvents.length} event{jobEvents.length !== 1 ? 's' : ''}
-                        </Typography>
-                      )}
-                      {passedEvents > 0 && (
-                        <Chip 
-                          label={`${passedEvents} passed`} 
-                          size="small" 
-                          color="success" 
-                          variant="outlined"
-                          sx={{ height: 20, fontSize: '0.7rem' }}
-                        />
-                      )}
-                      {failedEvents > 0 && (
-                        <Chip 
-                          label={`${failedEvents} failed`} 
-                          size="small" 
-                          color="error" 
-                          variant="outlined"
-                          sx={{ height: 20, fontSize: '0.7rem' }}
-                        />
-                      )}
-                    </Box>
-                  </Box>
-                  <Chip
-                    label={job.status.toUpperCase()}
-                    size="small"
-                    color={getStatusColor(job.status)}
-                  />
-                </Box>
-              </AccordionSummary>
-              <AccordionDetails>
-                {job.status === 'running' && (
-                  <Box sx={{ mb: 2 }}>
-                    <LinearProgress />
-                    <Typography variant="caption" sx={{ mt: 1, display: 'block', color: '#666' }}>
-                      Validation in progress... {job.processed_items} / {job.total_items} items
-                    </Typography>
-                  </Box>
-                )}
+						<Accordion
+							key={`job-${job.id}`}
+							expanded={expandedJob === `job-${job.id}`}
+							onChange={handleJobAccordionChange(`job-${job.id}`)}
+							elevation={2}
+							sx={{
+								border: 1,
+								borderColor: 'divider',
+								'&:before': { display: 'none' },
+							}}
+						>
+							<AccordionSummary
+								expandIcon={<ExpandMoreIcon />}
+								sx={{ bgcolor: 'background.paper' }}
+							>
+								<Box
+									sx={{
+										display: 'flex',
+										alignItems: 'center',
+										gap: 2,
+										width: '100%',
+									}}
+								>
+									{getStatusIcon(job.status)}
+									<Box sx={{ flex: 1 }}>
+										<Typography
+											variant="body1"
+											fontWeight="medium"
+											sx={{ color: '#000' }}
+										>
+											Validation Job #{job.id}
+											<Typography
+												component="span"
+												variant="caption"
+												sx={{ ml: 1, color: '#666' }}
+											>
+												({job.job_type})
+											</Typography>
+										</Typography>
+										<Box
+											sx={{
+												display: 'flex',
+												alignItems: 'center',
+												gap: 1,
+												mt: 0.5,
+											}}
+										>
+											<AccessTimeIcon sx={{ fontSize: 14, color: '#666' }} />
+											<Typography variant="caption" sx={{ color: '#666' }}>
+												{formatDistanceToNow(new Date(job.created_at), {
+													addSuffix: true,
+												})}
+											</Typography>
+											{jobEvents.length > 0 && (
+												<Typography variant="caption" sx={{ color: '#666' }}>
+													• {jobEvents.length} event
+													{jobEvents.length !== 1 ? 's' : ''}
+												</Typography>
+											)}
+											{passedEvents > 0 && (
+												<Chip
+													label={`${passedEvents} passed`}
+													size="small"
+													color="success"
+													variant="outlined"
+													sx={{ height: 20, fontSize: '0.7rem' }}
+												/>
+											)}
+											{failedEvents > 0 && (
+												<Chip
+													label={`${failedEvents} failed`}
+													size="small"
+													color="error"
+													variant="outlined"
+													sx={{ height: 20, fontSize: '0.7rem' }}
+												/>
+											)}
+										</Box>
+									</Box>
+									<Chip
+										label={job.status.toUpperCase()}
+										size="small"
+										color={getStatusColor(job.status)}
+									/>
+								</Box>
+							</AccordionSummary>
+							<AccordionDetails>
+								{job.status === 'running' && (
+									<Box sx={{ mb: 2 }}>
+										<LinearProgress />
+										<Typography
+											variant="caption"
+											sx={{ mt: 1, display: 'block', color: '#666' }}
+										>
+											Validation in progress... {job.processed_items} /{' '}
+											{job.total_items} items
+										</Typography>
+									</Box>
+								)}
 
-                {jobEvents.length === 0 ? (
-                  <Alert severity="info">
-                    No validation events found for this job.
-                  </Alert>
-                ) : (
-                  <Stack spacing={1}>
-                    <Typography variant="subtitle2" sx={{ color: '#666' }} gutterBottom>
-                      Validation Events
-                    </Typography>
-                    {jobEvents.map((event: ValidationEvent) => (
-                      <Accordion
-                        key={`event-${event.id}`}
-                        expanded={expandedEvent === `event-${event.id}`}
-                        onChange={handleEventAccordionChange(`event-${event.id}`)}
-                        elevation={0}
-                        sx={{ border: 1, borderColor: 'divider', borderRadius: 1 }}
-                      >
-                        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, width: '100%' }}>
-                            {getStatusIcon(event.status)}
-                            <Box sx={{ flex: 1 }}>
-                              <Typography variant="body2" fontWeight="medium" sx={{ color: '#000' }}>
-                                {event.event_name}
-                                {event.resource_name && (
-                                  <Typography component="span" variant="caption" sx={{ ml: 1, color: '#666' }}>
-                                    ({event.resource_name})
-                                  </Typography>
-                                )}
-                              </Typography>
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-                                <AccessTimeIcon sx={{ fontSize: 12, color: '#666' }} />
-                                <Typography variant="caption" sx={{ color: '#666' }}>
-                                  {formatDistanceToNow(new Date(event.event_timestamp), { addSuffix: true })}
-                                </Typography>
-                                {event.duration_ms && (
-                                  <Typography variant="caption" sx={{ color: '#666' }}>
-                                    • {event.duration_ms}ms
-                                  </Typography>
-                                )}
-                              </Box>
-                            </Box>
-                            <Chip
-                              label={event.status.toUpperCase()}
-                              size="small"
-                              color={getStatusColor(event.status)}
-                            />
-                            <Chip
-                              label={event.operation_status}
-                              size="small"
-                              variant="outlined"
-                              color={getStatusColor(event.operation_status)}
-                            />
-                          </Box>
-                        </AccordionSummary>
-                        <AccordionDetails>
-                          <Stack spacing={2}>
-                            <Box>
-                              <Typography variant="subtitle2" gutterBottom color="text.primary">
-                                Event Details
-                              </Typography>
-                              <TableContainer component={Paper} variant="outlined">
-                                <Table size="small">
-                                  <TableBody>
-                                    <TableRow>
-                                      <TableCell component="th" sx={{ fontWeight: 'medium', width: '30%', color: 'text.primary' }}>Category</TableCell>
-                                      <TableCell sx={{ color: 'text.primary' }}>{event.event_category}</TableCell>
-                                    </TableRow>
-                                    <TableRow>
-                                      <TableCell component="th" sx={{ fontWeight: 'medium', color: 'text.primary' }}>Validation Type</TableCell>
-                                      <TableCell sx={{ color: 'text.primary' }}>{event.validation_type}</TableCell>
-                                    </TableRow>
-                                    {event.resource_type && (
-                                      <TableRow>
-                                        <TableCell component="th" sx={{ fontWeight: 'medium', color: 'text.primary' }}>Resource Type</TableCell>
-                                        <TableCell sx={{ color: 'text.primary' }}>{event.resource_type}</TableCell>
-                                      </TableRow>
-                                    )}
-                                    <TableRow>
-                                      <TableCell component="th" sx={{ fontWeight: 'medium', color: 'text.primary' }}>Event Time</TableCell>
-                                      <TableCell sx={{ color: 'text.primary' }}>{format(new Date(event.event_timestamp), 'PPpp')}</TableCell>
-                                    </TableRow>
-                                    {event.submitted_at && (
-                                      <TableRow>
-                                        <TableCell component="th" sx={{ fontWeight: 'medium', color: 'text.primary' }}>Started</TableCell>
-                                        <TableCell sx={{ color: 'text.primary' }}>{format(new Date(event.submitted_at), 'PPpp')}</TableCell>
-                                      </TableRow>
-                                    )}
-                                    {event.completed_at && (
-                                      <TableRow>
-                                        <TableCell component="th" sx={{ fontWeight: 'medium', color: 'text.primary' }}>Completed</TableCell>
-                                        <TableCell sx={{ color: 'text.primary' }}>{format(new Date(event.completed_at), 'PPpp')}</TableCell>
-                                      </TableRow>
-                                    )}
-                                  </TableBody>
-                                </Table>
-                              </TableContainer>
-                            </Box>
+								{jobEvents.length === 0 ? (
+									<Alert severity="info">
+										No validation events found for this job.
+									</Alert>
+								) : (
+									<Stack spacing={1}>
+										<Typography
+											variant="subtitle2"
+											sx={{ color: '' }}
+											gutterBottom
+										>
+											Validation Events
+										</Typography>
+										{jobEvents.map((event: ValidationEvent) => (
+											<Accordion
+												key={`event-${event.id}`}
+												expanded={expandedEvent === `event-${event.id}`}
+												onChange={handleEventAccordionChange(
+													`event-${event.id}`
+												)}
+												elevation={0}
+												sx={{
+													border: 1,
+													borderColor: 'divider',
+													borderRadius: 1,
+												}}
+											>
+												<AccordionSummary expandIcon={<ExpandMoreIcon />}>
+													<Box
+														sx={{
+															display: 'flex',
+															alignItems: 'center',
+															gap: 2,
+															width: '100%',
+														}}
+													>
+														{getStatusIcon(event.status)}
+														<Box sx={{ flex: 1 }}>
+															<Typography
+																variant="body2"
+																fontWeight="medium"
+																sx={{ color: 'text.primary' }}
+															>
+																{event.event_name}
+																{event.resource_name && (
+																	<Typography
+																		component="span"
+																		variant="caption"
+																		sx={{ ml: 1, color: 'text.primary' }}
+																	>
+																		({event.resource_name})
+																	</Typography>
+																)}
+															</Typography>
+															<Box
+																sx={{
+																	display: 'flex',
+																	alignItems: 'center',
+																	gap: 1,
+																	mt: 0.5,
+																}}
+															>
+																<AccessTimeIcon
+																	sx={{ fontSize: 12, color: '#666' }}
+																/>
+																<Typography
+																	variant="caption"
+																	sx={{ color: '#666' }}
+																>
+																	{formatDistanceToNow(
+																		new Date(event.event_timestamp),
+																		{ addSuffix: true }
+																	)}
+																</Typography>
+																{event.duration_ms && (
+																	<Typography
+																		variant="caption"
+																		sx={{ color: '#666' }}
+																	>
+																		• {event.duration_ms}ms
+																	</Typography>
+																)}
+															</Box>
+														</Box>
+														<Chip
+															label={event.status.toUpperCase()}
+															size="small"
+															color={getStatusColor(event.status)}
+														/>
+														<Chip
+															label={event.operation_status}
+															size="small"
+															variant="outlined"
+															color={getStatusColor(event.operation_status)}
+														/>
+													</Box>
+												</AccordionSummary>
+												<AccordionDetails>
+													<Stack spacing={2}>
+														<Box>
+															<Typography
+																variant="subtitle2"
+																gutterBottom
+																color="text.primary"
+															>
+																Event Details
+															</Typography>
+															<TableContainer
+																component={Paper}
+																variant="outlined"
+															>
+																<Table size="small">
+																	<TableBody>
+																		<TableRow>
+																			<TableCell
+																				component="th"
+																				sx={{
+																					fontWeight: 'medium',
+																					width: '30%',
+																					color: 'text.primary',
+																				}}
+																			>
+																				Category
+																			</TableCell>
+																			<TableCell sx={{ color: 'text.primary' }}>
+																				{event.event_category}
+																			</TableCell>
+																		</TableRow>
+																		<TableRow>
+																			<TableCell
+																				component="th"
+																				sx={{
+																					fontWeight: 'medium',
+																					color: 'text.primary',
+																				}}
+																			>
+																				Validation Type
+																			</TableCell>
+																			<TableCell sx={{ color: 'text.primary' }}>
+																				{event.validation_type}
+																			</TableCell>
+																		</TableRow>
+																		{event.resource_type && (
+																			<TableRow>
+																				<TableCell
+																					component="th"
+																					sx={{
+																						fontWeight: 'medium',
+																						color: 'text.primary',
+																					}}
+																				>
+																					Resource Type
+																				</TableCell>
+																				<TableCell
+																					sx={{ color: 'text.primary' }}
+																				>
+																					{event.resource_type}
+																				</TableCell>
+																			</TableRow>
+																		)}
+																		<TableRow>
+																			<TableCell
+																				component="th"
+																				sx={{
+																					fontWeight: 'medium',
+																					color: 'text.primary',
+																				}}
+																			>
+																				Event Time
+																			</TableCell>
+																			<TableCell sx={{ color: 'text.primary' }}>
+																				{format(
+																					new Date(event.event_timestamp),
+																					'PPpp'
+																				)}
+																			</TableCell>
+																		</TableRow>
+																		{event.submitted_at && (
+																			<TableRow>
+																				<TableCell
+																					component="th"
+																					sx={{
+																						fontWeight: 'medium',
+																						color: 'text.primary',
+																					}}
+																				>
+																					Started
+																				</TableCell>
+																				<TableCell
+																					sx={{ color: 'text.primary' }}
+																				>
+																					{format(
+																						new Date(event.submitted_at),
+																						'PPpp'
+																					)}
+																				</TableCell>
+																			</TableRow>
+																		)}
+																		{event.completed_at && (
+																			<TableRow>
+																				<TableCell
+																					component="th"
+																					sx={{
+																						fontWeight: 'medium',
+																						color: 'text.primary',
+																					}}
+																				>
+																					Completed
+																				</TableCell>
+																				<TableCell
+																					sx={{ color: 'text.primary' }}
+																				>
+																					{format(
+																						new Date(event.completed_at),
+																						'PPpp'
+																					)}
+																				</TableCell>
+																			</TableRow>
+																		)}
+																	</TableBody>
+																</Table>
+															</TableContainer>
+														</Box>
 
-                            {event.message && (
-                              <Box>
-                                <Typography variant="subtitle2" gutterBottom color="text.primary">
-                                  Message
-                                </Typography>
-                                <Alert severity={event.status === 'passed' ? 'success' : event.status === 'failed' ? 'error' : 'info'}>
-                                  {event.message}
-                                </Alert>
-                              </Box>
-                            )}
+														{event.message && (
+															<Box>
+																<Typography
+																	variant="subtitle2"
+																	gutterBottom
+																	color="text.primary"
+																>
+																	Message
+																</Typography>
+																<Alert
+																	severity={
+																		event.status === 'passed'
+																			? 'success'
+																			: event.status === 'failed'
+																			? 'error'
+																			: 'info'
+																	}
+																>
+																	{event.message}
+																</Alert>
+															</Box>
+														)}
 
-                            {event.error_message && (
-                              <Box>
-                                <Typography variant="subtitle2" gutterBottom color="text.primary">
-                                  Error
-                                </Typography>
-                                <Alert severity="error">
-                                  {event.error_message}
-                                </Alert>
-                              </Box>
-                            )}
+														{event.error_message && (
+															<Box>
+																<Typography
+																	variant="subtitle2"
+																	gutterBottom
+																	color="text.primary"
+																>
+																	Error
+																</Typography>
+																<Alert severity="error">
+																	{event.error_message}
+																</Alert>
+															</Box>
+														)}
 
-                            {event.request_payload && Object.keys(event.request_payload).length > 0 && (
-                              <Box>
-                                <Typography variant="subtitle2" gutterBottom color="text.primary">
-                                  Request Details
-                                </Typography>
-                                <Paper variant="outlined" sx={{ p: 1, bgcolor: 'grey.50' }}>
-                                  <pre style={{ margin: 0, fontSize: '0.75rem', overflow: 'auto', color: '#000' }}>
-                                    {JSON.stringify(event.request_payload, null, 2)}
-                                  </pre>
-                                </Paper>
-                              </Box>
-                            )}
+														{event.request_payload &&
+															Object.keys(event.request_payload).length > 0 && (
+																<Box>
+																	<Typography
+																		variant="subtitle2"
+																		gutterBottom
+																		color="text.primary"
+																	>
+																		Request Details
+																	</Typography>
+																	<Paper
+																		variant="outlined"
+																		sx={{ p: 1, bgcolor: 'grey.50' }}
+																	>
+																		<pre
+																			style={{
+																				margin: 0,
+																				fontSize: '0.75rem',
+																				overflow: 'auto',
+																				color: '#000',
+																			}}
+																		>
+																			{JSON.stringify(
+																				event.request_payload,
+																				null,
+																				2
+																			)}
+																		</pre>
+																	</Paper>
+																</Box>
+															)}
 
-                            {event.response_payload && Object.keys(event.response_payload).length > 0 && (
-                              <Box>
-                                <Typography variant="subtitle2" gutterBottom color="text.primary">
-                                  Response Details
-                                </Typography>
-                                <Paper variant="outlined" sx={{ p: 1, bgcolor: 'grey.50' }}>
-                                  <pre style={{ margin: 0, fontSize: '0.75rem', overflow: 'auto', color: '#000' }}>
-                                    {JSON.stringify(event.response_payload, null, 2)}
-                                  </pre>
-                                </Paper>
-                              </Box>
-                            )}
-                          </Stack>
-                        </AccordionDetails>
-                      </Accordion>
-                    ))}
-                  </Stack>
-                )}
-              </AccordionDetails>
-            </Accordion>
-          );
+														{event.response_payload &&
+															Object.keys(event.response_payload).length >
+																0 && (
+																<Box>
+																	<Typography
+																		variant="subtitle2"
+																		gutterBottom
+																		color="text.primary"
+																	>
+																		Response Details
+																	</Typography>
+																	<Paper
+																		variant="outlined"
+																		sx={{ p: 1, bgcolor: 'grey.50' }}
+																	>
+																		<pre
+																			style={{
+																				margin: 0,
+																				fontSize: '0.75rem',
+																				overflow: 'auto',
+																				color: '#000',
+																			}}
+																		>
+																			{JSON.stringify(
+																				event.response_payload,
+																				null,
+																				2
+																			)}
+																		</pre>
+																	</Paper>
+																</Box>
+															)}
+													</Stack>
+												</AccordionDetails>
+											</Accordion>
+										))}
+									</Stack>
+								)}
+							</AccordionDetails>
+						</Accordion>
+					)
         })}
       </Stack>
     </Box>

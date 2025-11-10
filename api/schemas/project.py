@@ -13,12 +13,17 @@ class ProjectBase(BaseModel):
     """Base schema for project."""
     name: str = Field(..., min_length=1, max_length=255, description="Project name")
     description: Optional[str] = Field(None, description="Project description")
-    azure_subscription_id: str = Field(..., description="Azure subscription ID")
-    metadata_json: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+    azure_tenant_id: str = Field(..., description="Azure tenant (directory) ID - required for project")
+    metadata_json: Optional[Dict[str, Any]] = Field(None, description="Additional metadata including landing zones with subscriptions")
+    # Azure authentication fields (optional on create)
+    auth_method: Optional[str] = Field(
+        None, description="Authentication method: azure_cli, service_principal, or managed_identity"
+    )
 
 
 class ProjectCreate(ProjectBase):
     """Schema for creating a project."""
+    # Inherits Azure auth fields from ProjectBase
     pass
 
 
@@ -27,8 +32,12 @@ class ProjectUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = None
     status: Optional[ProjectStatus] = None
-    azure_subscription_id: Optional[str] = None
+    azure_tenant_id: Optional[str] = Field(None, description="Azure tenant (directory) ID")
     metadata_json: Optional[Dict[str, Any]] = None
+    # Azure authentication fields (all optional)
+    auth_method: Optional[str] = Field(
+        None, description="Authentication method: azure_cli, service_principal, or managed_identity"
+    )
 
 
 class ProjectResponse(ProjectBase):
@@ -40,11 +49,16 @@ class ProjectResponse(ProjectBase):
     created_at: datetime
     updated_at: Optional[datetime]
     
+    # Azure authentication fields
+    azure_tenant_id: str = Field(..., description="Azure tenant (directory) ID")
+    auth_method: Optional[str] = Field(None, description="Authentication method: azure_cli, service_principal, or managed_identity")
+    auth_token_expires_at: Optional[datetime] = Field(None, description="Token expiration timestamp")
+    
     # Counts (computed fields)
     servers_count: Optional[int] = Field(None, description="Number of servers in project")
     validations_count: Optional[int] = Field(None, description="Number of validations")
     lz_migrate_projects: Optional[List[Dict[str, Any]]] = Field(
-        None, description="Validated Azure Migrate projects grouped with landing zones"
+        None, description="Validated Azure Migrate projects grouped with landing zones (each with subscriptionId)"
     )
     validation_settings: Optional[Dict[str, Any]] = Field(
         None, description="Validation configuration settings for the project"
