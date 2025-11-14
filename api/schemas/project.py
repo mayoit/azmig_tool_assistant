@@ -50,7 +50,7 @@ class ProjectResponse(ProjectBase):
     updated_at: Optional[datetime]
     
     # Azure authentication fields
-    azure_tenant_id: str = Field(..., description="Azure tenant (directory) ID")
+    azure_tenant_id: Optional[str] = Field(None, description="Azure tenant (directory) ID")
     auth_method: Optional[str] = Field(None, description="Authentication method: azure_cli, service_principal, or managed_identity")
     auth_token_expires_at: Optional[datetime] = Field(None, description="Token expiration timestamp")
     

@@ -2,8 +2,6 @@ import { useState } from 'react';
 import {
   Box,
   Typography,
-  Card,
-  CardContent,
   Switch,
   FormControlLabel,
   TextField,
@@ -89,6 +87,17 @@ const defaultSettings: ValidationSettings = {
   },
 };
 
+type ToggleConfig = { enabled: boolean };
+
+const isToggleConfig = (value: unknown): value is ToggleConfig =>
+  typeof value === 'object' && value !== null && 'enabled' in value &&
+  typeof (value as { enabled: boolean }).enabled === 'boolean';
+
+const countEnabledEntries = (
+  section: Record<string, ToggleConfig | Record<string, unknown>>
+): number =>
+  Object.values(section).filter((value) => isToggleConfig(value) && value.enabled).length;
+
 export default function ValidationSettingsEditor({
   projectId,
   initialSettings,
@@ -128,21 +137,30 @@ export default function ValidationSettingsEditor({
     setSettings(initialSettings || defaultSettings);
   };
 
-  const updateGlobal = (field: keyof ValidationSettings['global'], value: any) => {
+  const updateGlobal = <K extends keyof ValidationSettings['global']>(
+    field: K,
+    value: ValidationSettings['global'][K]
+  ) => {
     setSettings((prev) => ({
       ...prev,
       global: { ...prev.global, [field]: value },
     }));
   };
 
-  const updateLandingZone = (field: string, value: any) => {
+  const updateLandingZone = <K extends keyof ValidationSettings['landing_zone']>(
+    field: K,
+    value: ValidationSettings['landing_zone'][K]
+  ) => {
     setSettings((prev) => ({
       ...prev,
       landing_zone: { ...prev.landing_zone, [field]: value },
     }));
   };
 
-  const updateServers = (field: keyof ValidationSettings['servers'], value: any) => {
+  const updateServers = <K extends keyof ValidationSettings['servers']>(
+    field: K,
+    value: ValidationSettings['servers'][K]
+  ) => {
     setSettings((prev) => ({
       ...prev,
       servers: { ...prev.servers, [field]: value },

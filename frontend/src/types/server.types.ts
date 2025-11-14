@@ -34,6 +34,13 @@ export interface ServerConfigCreate {
   target_subnet: string;
   target_machine_sku: string;
   target_disk_type: string;
+  appliance_id?: number | null;
+  migrate_project_name?: string | null;
+  appliance_name?: string | null;
+  appliance_type?: string | null;
+  recovery_vault_name?: string | null;
+  cache_storage_account?: string | null;
+  cache_storage_rg?: string | null;
 }
 
 export interface ServerUploadResponse {

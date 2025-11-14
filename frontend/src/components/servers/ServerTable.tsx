@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import {
   DataGrid,
-  GridColDef,
-  GridRowModesModel,
   GridRowModes,
   GridActionsCellItem,
+  GridRowEditStopReasons,
+} from '@mui/x-data-grid';
+import type {
+  GridColDef,
+  GridRowModesModel,
   GridEventListener,
   GridRowId,
   GridRowModel,
-  GridRowEditStopReasons,
 } from '@mui/x-data-grid';
 import {
   Box,
@@ -28,10 +30,10 @@ interface ServerTableProps {
   projectId: number;
 }
 
-interface ServerRow extends Partial<ServerConfig> {
+type ServerRow = Partial<Omit<ServerConfig, 'id'>> & {
   id: number | string;
   isNew?: boolean;
-}
+};
 
 const ServerTable: React.FC<ServerTableProps> = ({ projectId }) => {
   const [rows, setRows] = useState<ServerRow[]>([]);
@@ -217,7 +219,6 @@ const ServerTable: React.FC<ServerTableProps> = ({ projectId }) => {
             <GridActionsCellItem
               icon={<SaveIcon />}
               label="Save"
-              sx={{ color: 'primary.main' }}
               onClick={handleSaveClick(id)}
             />,
             <GridActionsCellItem

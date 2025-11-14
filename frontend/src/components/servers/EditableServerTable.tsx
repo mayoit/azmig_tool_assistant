@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Box,
   Button,
@@ -18,7 +18,6 @@ import {
   MenuItem,
   FormControl,
   Checkbox,
-  Collapse,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -42,6 +41,7 @@ interface EditableServerTableProps {
   availableSubscriptions?: Array<[string, string]>;  // [id, name] tuples from landing zones
   availableRegions?: string[];        // From project settings
   landingZoneAppliances?: LandingZoneMigrateProject[];  // Available appliances from LZ
+  availableVMSkus?: string[]; // Allowed SKUs from project config
 }
 
 interface EditingRow {
@@ -51,7 +51,24 @@ interface EditingRow {
   target_resource_group: string;
   target_vnet: string;
   target_subnet: string;
+  target_machine_sku: string;
   appliance_id: number | null;
+}
+
+interface DiscoveryDisk {
+  name: string;
+  sizeGB: number;
+  type: string;
+}
+
+interface DiscoveryDetails {
+  discovered: boolean;
+  ipAddresses: string[];
+  nicCount: number;
+  osType: string;
+  cpuCores: number;
+  memoryMB: number;
+  disks: DiscoveryDisk[];
 }
 
 export default function EditableServerTable({
@@ -63,6 +80,7 @@ export default function EditableServerTable({
   availableSubscriptions = [],
   availableRegions = [],
   landingZoneAppliances = [],
+  availableVMSkus = [],
 }: EditableServerTableProps) {
   console.log('[EditableServerTable] Received landingZoneAppliances:', landingZoneAppliances);
   console.log('[EditableServerTable] First appliance:', landingZoneAppliances[0]);
@@ -70,13 +88,15 @@ export default function EditableServerTable({
     console.log('[EditableServerTable] First appliance keys:', Object.keys(landingZoneAppliances[0]));
   }
   
+  const getDefaultSku = () => availableVMSkus[0] || 'Standard_DS2_v2';
+
   const [editingId, setEditingId] = useState<number | null>(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [savingId, setSavingId] = useState<number | 'new' | null>(null);
   const [selectedServers, setSelectedServers] = useState<Set<number>>(new Set());
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [validatingServers, setValidatingServers] = useState<Set<number>>(new Set());
-  const [discoveredDetails, setDiscoveredDetails] = useState<Map<number, any>>(new Map());
+  const [discoveredDetails, setDiscoveredDetails] = useState<Map<number, DiscoveryDetails>>(new Map());
   
   const [editData, setEditData] = useState<EditingRow>({
     target_machine_name: '',
@@ -85,8 +105,51 @@ export default function EditableServerTable({
     target_resource_group: '',
     target_vnet: '',
     target_subnet: '',
+    target_machine_sku: getDefaultSku(),
     appliance_id: null,
   });
+
+  useEffect(() => {
+    if (!editData.target_machine_sku && availableVMSkus.length > 0) {
+      setEditData((prev) => ({ ...prev, target_machine_sku: availableVMSkus[0] }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availableVMSkus]);
+
+  const renderSkuField = (
+    value: string,
+    onChange: (sku: string) => void,
+    disabled: boolean
+  ) => {
+    if (availableVMSkus.length > 0) {
+      const normalizedValue = value || availableVMSkus[0];
+      return (
+        <FormControl size="small" fullWidth disabled={disabled}>
+          <Select
+            value={normalizedValue}
+            onChange={(e) => onChange(e.target.value)}
+          >
+            {availableVMSkus.map((sku) => (
+              <MenuItem key={sku} value={sku}>
+                {sku}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      );
+    }
+
+    return (
+      <TextField
+        size="small"
+        fullWidth
+        placeholder="Standard_DS2_v2"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+      />
+    );
+  };
 
   // Helper function to get subscription name from ID
   const getSubscriptionName = (subscriptionId: string): string => {
@@ -187,6 +250,7 @@ export default function EditableServerTable({
       target_resource_group: server.target_resource_group || '',
       target_vnet: server.target_vnet || '',
       target_subnet: server.target_subnet || '',
+      target_machine_sku: server.target_machine_sku || getDefaultSku(),
       appliance_id: server.appliance_id || null,
     });
   };
@@ -200,6 +264,7 @@ export default function EditableServerTable({
       target_resource_group: '',
       target_vnet: '',
       target_subnet: '',
+      target_machine_sku: getDefaultSku(),
       appliance_id: null,
     });
   };
@@ -209,6 +274,8 @@ export default function EditableServerTable({
       alert('Target Machine Name is required');
       return;
     }
+
+    const normalizedSku = editData.target_machine_sku || getDefaultSku();
 
     // Get appliance and cache storage details
     const appliance = editData.appliance_id !== null ? getApplianceDetails(editData.appliance_id) : null;
@@ -230,6 +297,7 @@ export default function EditableServerTable({
         target_resource_group: editData.target_resource_group,
         target_vnet: editData.target_vnet,
         target_subnet: editData.target_subnet,
+  target_machine_sku: normalizedSku,
         appliance_id: editData.appliance_id,
         // Extract actual names from appliance object - use camelCase properties
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -249,6 +317,7 @@ export default function EditableServerTable({
         target_resource_group: '',
         target_vnet: '',
         target_subnet: '',
+        target_machine_sku: getDefaultSku(),
         appliance_id: null,
       });
     } finally {
@@ -338,6 +407,7 @@ export default function EditableServerTable({
       target_resource_group: '',
       target_vnet: '',
       target_subnet: '',
+      target_machine_sku: getDefaultSku(),
       appliance_id: null,
     });
   };
@@ -351,6 +421,7 @@ export default function EditableServerTable({
       target_resource_group: '',
       target_vnet: '',
       target_subnet: '',
+      target_machine_sku: getDefaultSku(),
       appliance_id: null,
     });
   };
@@ -360,6 +431,8 @@ export default function EditableServerTable({
       alert('Target Machine Name is required');
       return;
     }
+
+    const normalizedSku = editData.target_machine_sku || getDefaultSku();
 
     // Get appliance and cache storage details
     const appliance = editData.appliance_id !== null ? getApplianceDetails(editData.appliance_id) : null;
@@ -393,7 +466,7 @@ export default function EditableServerTable({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         cache_storage_rg: (cacheStorageZone as any)?.cacheStorageResourceGroup || (cacheStorageZone as any)?.['Cache Storage Resource Group'],
         // Set defaults for required fields
-        target_machine_sku: 'Standard_DS2_v2',
+        target_machine_sku: normalizedSku,
         target_disk_type: 'Premium_LRS',
       });
       setIsAddingNew(false);
@@ -404,6 +477,7 @@ export default function EditableServerTable({
         target_resource_group: '',
         target_vnet: '',
         target_subnet: '',
+        target_machine_sku: getDefaultSku(),
         appliance_id: null,
       });
     } finally {
@@ -427,7 +501,7 @@ export default function EditableServerTable({
           <Button
             variant="contained"
             startIcon={<AddIcon />}
-            onClick={handleStartAddNew}
+            onClick={handleAddNew}
             disabled={isAddingNew || isLoading}
           >
             Add Server
@@ -450,7 +524,6 @@ export default function EditableServerTable({
               <TableCell sx={{ fontWeight: 'bold' }}>Target Machine Name</TableCell>
               <TableCell sx={{ fontWeight: 'bold' }}>Subscription</TableCell>
               <TableCell sx={{ fontWeight: 'bold' }}>Region</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Appliance</TableCell>
               <TableCell sx={{ fontWeight: 'bold' }}>Target Resource Group</TableCell>
               <TableCell sx={{ fontWeight: 'bold' }}>Target VNet</TableCell>
               <TableCell sx={{ fontWeight: 'bold' }}>Target Subnet</TableCell>
@@ -464,6 +537,10 @@ export default function EditableServerTable({
             {/* New server row (shown at top when adding) */}
             {isAddingNew && (
               <TableRow sx={{ bgcolor: 'action.hover' }}>
+                <TableCell padding="checkbox">
+                  <Checkbox size="small" disabled />
+                </TableCell>
+                <TableCell sx={{ width: 50 }} />
                 <TableCell>
                   <TextField
                     size="small"
@@ -530,46 +607,6 @@ export default function EditableServerTable({
                   </FormControl>
                 </TableCell>
                 <TableCell>
-                  {editData.appliance_id !== null && editData.appliance_id !== undefined ? (
-                    <Box>
-                      <Box sx={{ fontWeight: 500 }}>
-                        {(() => {
-                          const appliance = getApplianceDetails(editData.appliance_id);
-                          // Handle both camelCase and Title Case property names
-                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                          return (appliance as any)?.applianceName || (appliance as any)?.['Appliance Name'] || '-';
-                        })()}
-                      </Box>
-                      <Box sx={{ fontSize: '0.75rem', color: 'text.secondary', mt: 0.5 }}>
-                        {(() => {
-                          const appliance = getApplianceDetails(editData.appliance_id);
-                          if (!appliance) return null;
-                          const matchedZone = getCacheStorageForSubscriptionRegion(
-                            editData.target_subscription, 
-                            editData.target_region, 
-                            editData.appliance_id
-                          );
-                          // Handle both camelCase and Title Case property names
-                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                          const cacheStorage = (matchedZone as any)?.cacheStorageAccount || (matchedZone as any)?.['Cache Storage Account'];
-                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                          const projectName = (appliance as any)?.migrateProjectName || (appliance as any)?.['Migrate Project Name'];
-                          return (
-                            <Box component="span">
-                              Project: {projectName}
-                              {cacheStorage && ` | Cache: ${cacheStorage}`}
-                            </Box>
-                          );
-                        })()}
-                      </Box>
-                    </Box>
-                  ) : (
-                    <Box sx={{ color: 'text.disabled', fontStyle: 'italic', fontSize: '0.875rem' }}>
-                      Select subscription & region first
-                    </Box>
-                  )}
-                </TableCell>
-                <TableCell>
                   <TextField
                     size="small"
                     fullWidth
@@ -602,14 +639,11 @@ export default function EditableServerTable({
                   />
                 </TableCell>
                 <TableCell>
-                  <TextField
-                    size="small"
-                    fullWidth
-                    placeholder="Standard_DS2_v2"
-                    value={editData.target_machine_sku || 'Standard_DS2_v2'}
-                    onChange={(e) => setEditData({ ...editData, target_machine_sku: e.target.value })}
-                    disabled={savingId === 'new'}
-                  />
+                  {renderSkuField(
+                    editData.target_machine_sku,
+                    (sku) => setEditData({ ...editData, target_machine_sku: sku }),
+                    savingId === 'new'
+                  )}
                 </TableCell>
                 <TableCell align="right">
                   <Tooltip title="Save">
@@ -648,7 +682,6 @@ export default function EditableServerTable({
               const isEditing = editingId === server.id;
               const isSaving = savingId === server.id;
               const isExpanded = expandedRows.has(server.id);
-              const isValidating = validatingServers.has(server.id);
               const discoveredData = discoveredDetails.get(server.id);
 
               return (
@@ -746,58 +779,6 @@ export default function EditableServerTable({
                   </TableCell>
                   <TableCell>
                     {isEditing ? (
-                      editData.appliance_id !== null && editData.appliance_id !== undefined ? (
-                        <Box>
-                          <Box sx={{ fontWeight: 500 }}>
-                            {(() => {
-                              const appliance = getApplianceDetails(editData.appliance_id);
-                              // Handle both camelCase and Title Case property names
-                              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                              return (appliance as any)?.applianceName || (appliance as any)?.['Appliance Name'] || '-';
-                            })()}
-                          </Box>
-                          <Box sx={{ fontSize: '0.75rem', color: 'text.secondary', mt: 0.5 }}>
-                            {(() => {
-                              const appliance = getApplianceDetails(editData.appliance_id);
-                              if (!appliance) return null;
-                              const matchedZone = getCacheStorageForSubscriptionRegion(
-                                editData.target_subscription, 
-                                editData.target_region, 
-                                editData.appliance_id
-                              );
-                              // Handle both camelCase and Title Case property names
-                              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                              const cacheStorage = (matchedZone as any)?.cacheStorageAccount || (matchedZone as any)?.['Cache Storage Account'];
-                              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                              const projectName = (appliance as any)?.migrateProjectName || (appliance as any)?.['Migrate Project Name'];
-                              return (
-                                <Box component="span">
-                                  Project: {projectName}
-                                  {cacheStorage && ` | Cache: ${cacheStorage}`}
-                                </Box>
-                              );
-                            })()}
-                          </Box>
-                        </Box>
-                      ) : (
-                        <Box sx={{ color: 'text.disabled', fontStyle: 'italic', fontSize: '0.875rem' }}>
-                          Select subscription & region first
-                        </Box>
-                      )
-                    ) : (
-                      <Box>
-                        <Box>{server.appliance_name || '-'}</Box>
-                        {server.appliance_id !== null && server.appliance_id !== undefined && (
-                          <Box sx={{ fontSize: '0.75rem', color: 'text.secondary', mt: 0.5 }}>
-                            Project: {server.migrate_project_name || '-'}
-                            {server.cache_storage_account && ` | Cache: ${server.cache_storage_account}`}
-                          </Box>
-                        )}
-                      </Box>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {isEditing ? (
                       <TextField
                         size="small"
                         fullWidth
@@ -839,6 +820,17 @@ export default function EditableServerTable({
                       />
                     ) : (
                       server.target_subnet || '-'
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {isEditing ? (
+                      renderSkuField(
+                        editData.target_machine_sku,
+                        (sku) => setEditData({ ...editData, target_machine_sku: sku }),
+                        isSaving
+                      )
+                    ) : (
+                      server.target_machine_sku || '-'
                     )}
                   </TableCell>
                   <TableCell align="right">
@@ -906,13 +898,14 @@ export default function EditableServerTable({
                     )}
                   </TableCell>
                 </TableRow>
+                </>
               );
             })}
 
             {/* Empty state */}
             {servers.length === 0 && !isAddingNew && (
               <TableRow>
-                <TableCell colSpan={5} align="center">
+                <TableCell colSpan={10} align="center">
                   <Box sx={{ py: 4 }}>
                     <Typography variant="body1" color="text.secondary" gutterBottom>
                       No servers configured yet
@@ -928,7 +921,7 @@ export default function EditableServerTable({
             {/* Loading state */}
             {isLoading && (
               <TableRow>
-                <TableCell colSpan={5} align="center">
+                <TableCell colSpan={10} align="center">
                   <CircularProgress sx={{ my: 3 }} />
                 </TableCell>
               </TableRow>

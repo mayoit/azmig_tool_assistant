@@ -159,6 +159,55 @@ export default function ServersPage() {
     return appliances;
   }, [project]);
 
+  const availableSubscriptions = useMemo(() => {
+    if (!project) {
+      return [] as Array<[string, string]>;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const allZones = ((project.metadata_json as any)?.lz_migrate_projects || []).flatMap((mp: any) => {
+      const zones = mp.app_landing_zones || mp.appLandingZones || [];
+      return zones
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .map((zone: any) => {
+          const subId = zone.subscriptionId || zone['Subscription ID'];
+          const subName = zone.subscriptionName || zone['Subscription Name'] || subId;
+          return subId ? [subId, subName] as [string, string] : null;
+        })
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .filter((item: any) => item !== null);
+    });
+
+    const uniqueSubs = new Map<string, string>();
+    allZones.forEach(([id, name]: [string, string]) => {
+      if (!uniqueSubs.has(id)) {
+        uniqueSubs.set(id, name);
+      }
+    });
+
+    return Array.from(uniqueSubs.entries());
+  }, [project]);
+
+  const availableRegions = useMemo(() => {
+    if (!project) {
+      return [] as string[];
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const projectSettings = (project.metadata_json?.project_settings as any) || {};
+    return (projectSettings.allowed_regions as string[]) || [];
+  }, [project]);
+
+  const availableVMSkus = useMemo(() => {
+    if (!project) {
+      return [] as string[];
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const projectSettings = (project.metadata_json?.project_settings as any) || {};
+    return (projectSettings.allowed_vm_skus as string[]) || [];
+  }, [project]);
+
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file && projectId) {
@@ -314,7 +363,10 @@ export default function ServersPage() {
             await deleteMutation.mutateAsync(serverId);
           }}
           isLoading={serversLoading}
+          availableSubscriptions={availableSubscriptions}
+          availableRegions={availableRegions}
           landingZoneAppliances={landingZoneAppliances}
+          availableVMSkus={availableVMSkus}
         />
       )}
     </Box>

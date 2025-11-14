@@ -867,7 +867,7 @@ export default function ProjectDetailsPage() {
                   
                   // Deduplicate by subscription ID
                   const uniqueSubs = new Map<string, string>();
-                  allZones.forEach(([id, name]) => {
+                  allZones.forEach(([id, name]: [string, string]) => {
                     if (!uniqueSubs.has(id)) {
                       uniqueSubs.set(id, name);
                     }
@@ -893,6 +893,15 @@ export default function ProjectDetailsPage() {
                 // Only use metadata_json as the single source of truth
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 (project.metadata_json as any)?.lz_migrate_projects || []
+              }
+              availableVMSkus={
+                (() => {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  const projectSettings = (project.metadata_json?.project_settings as any) || {};
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  const skus = (projectSettings.allowed_vm_skus as string[]) || [];
+                  return skus;
+                })()
               }
             />
             
